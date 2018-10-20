@@ -64,3 +64,4 @@ ga 是一个缩写，可以有多种含义：
 
 - [ideas](./docs/ideas.md)
 - [istio](./docs/istio.md)
+- [与 es 配合架构思考](./docs/add-es.md)
