@@ -1,4 +1,4 @@
-# **G**uardian **A**ngel
+# **G** uardian **A** ngel
 
 A lightweight middleware for service-oriented architecture
 
@@ -6,8 +6,8 @@ A lightweight middleware for service-oriented architecture
 ## 简介
 
 ga 是一个缩写，可以有多种含义：
-1. guardian angel (守护神)
-2. general agent (总代)
+1. **G**uardian **A**ngel (守护神)
+2. **G**eneral **A**gent (总代)
 
 
 ## 起因
@@ -15,9 +15,9 @@ ga 是一个缩写，可以有多种含义：
 
 ### 现象和需求
 
-在众包项目开发过程中，我们从**微服务架构**尝试到**基于服务的架构**转变，其中遇到这么几个问题：
+在众包项目开发过程中，我们从 **微服务架构** 尝试到 **基于服务的架构** 转变，其中遇到这么几个问题：
 
-1. 每个**（微）服务**的开发人员，都需要处理一些通用需求，如：
+1. 每个 **（微）服务** 的开发人员，都需要处理一些通用需求，如：
    - JWT (access_token) 的校验，解开 payload，获取 uid (用户ID)
    - 对于请求的 uid 进行鉴定权限
    - 对于请求参数作校验
