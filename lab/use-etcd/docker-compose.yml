@@ -1,0 +1,31 @@
+# https://coreos.com/etcd/docs/latest/op-guide/container.html
+# docker run \
+#   -p 2379:2379 \
+#   -p 2380:2380 \
+#   --volume=${DATA_DIR}:/etcd-data \
+#   --name etcd quay.io/coreos/etcd:latest \
+#   /usr/local/bin/etcd \
+#   --data-dir=/etcd-data --name node1 \
+#   --initial-advertise-peer-urls http://${NODE1}:2380 --listen-peer-urls http://${NODE1}:2380 \
+#   --advertise-client-urls http://${NODE1}:2379 --listen-client-urls http://${NODE1}:2379 \
+#   --initial-cluster node1=http://${NODE1}:2380
+
+version: '3'
+services:
+    etcd:
+        image: quay.io/coreos/etcd:v3.3
+        volumes:
+            - ./etcd-data:/etcd-data
+        ports:
+            - 2379:2379
+            - 2380:2380
+        entrypoint: |
+            /usr/local/bin/etcd
+            --data-dir /etcd-data
+            --name node1
+            --initial-advertise-peer-urls http://127.0.0.1:2380
+            --listen-peer-urls http://0.0.0.0:2380
+            --advertise-client-urls http://0.0.0.0:2379
+            --listen-client-urls http://0.0.0.0:2379
+            --initial-cluster node1=http://127.0.0.1:2380
+            --debug

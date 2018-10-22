@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/ooclab/ga/middlewares/auth"
 	"github.com/ooclab/ga/middlewares/uid"
 )
 
@@ -73,9 +74,12 @@ func getRedirectHandler(pubKey []byte, backendServer string) http.Handler {
 	}
 	proxy := NewSingleHostReverseProxy(backendURL)
 
-	n := negroni.Classic()
-	n.Use(negroni.NewStatic(http.Dir("/tmp")))
+	serviceName := viper.GetString("service_name")
+	swaggerPath := viper.GetString("swagger_doc")
+
+	n := negroni.New()
 	n.Use(uid.NewMiddleware(pubKey))
+	n.Use(auth.NewMiddleware(serviceName, swaggerPath))
 	n.UseHandler(proxy)
 
 	return n
