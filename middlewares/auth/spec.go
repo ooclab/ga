@@ -1,9 +1,11 @@
 package auth
 
 import (
-	"crypto/md5"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/go-openapi/loads"
 	"github.com/go-openapi/spec"
@@ -18,6 +20,10 @@ type Spec struct {
 	path        string
 	router      *mux.Router
 	doc         *loads.Document
+
+	// find swagger path by route
+	routePathMap      map[*mux.Route]string
+	routePathMapMutex *sync.Mutex
 }
 
 // NewSpec create a new Spec struct
@@ -25,7 +31,22 @@ func NewSpec(serviceName, path string) *Spec {
 	return &Spec{
 		serviceName: serviceName,
 		path:        path,
+
+		routePathMap:      make(map[*mux.Route]string),
+		routePathMapMutex: &sync.Mutex{},
 	}
+}
+
+func (s *Spec) getRoutePath(route *mux.Route) string {
+	s.routePathMapMutex.Lock()
+	defer s.routePathMapMutex.Unlock()
+	return s.routePathMap[route]
+}
+
+func (s *Spec) addRoutePath(route *mux.Route, path string) {
+	s.routePathMapMutex.Lock()
+	defer s.routePathMapMutex.Unlock()
+	s.routePathMap[route] = path
 }
 
 func (s *Spec) addOperation(method string, path string, op *spec.Operation) {
@@ -34,8 +55,9 @@ func (s *Spec) addOperation(method string, path string, op *spec.Operation) {
 		desc = op.Description
 	}
 	route := s.router.NewRoute().Methods(method).Path(path)
-	perm := NewPermssion(s.serviceName, route, desc)
-	fmt.Printf("%s\n\t%s\n", path, perm)
+	perm := NewPermssion(s.serviceName, route, path, desc)
+	s.addRoutePath(route, path)
+	fmt.Printf("%s\n", perm)
 }
 
 // Load try to load the swagger spec specified by path
@@ -85,6 +107,17 @@ func (s *Spec) Load() *loads.Document {
 	return s.doc
 }
 
+func (s *Spec) SearchPermission(req *http.Request) (*Permission, error) {
+	var match mux.RouteMatch
+	if ok := s.router.Match(req, &match); ok {
+		path := s.getRoutePath(match.Route)
+		perm := NewPermssion(s.serviceName, match.Route, path, "")
+		return perm, nil
+	} else {
+		return nil, errors.New("not match")
+	}
+}
+
 func getPermissionID(route *mux.Route) string {
 	methods, _ := route.GetMethods()
 	path, _ := route.GetPathRegexp()
@@ -101,21 +134,21 @@ type Permission struct {
 }
 
 // NewPermssion create a new Permission object
-func NewPermssion(serviceName string, route *mux.Route, summary string) *Permission {
+func NewPermssion(serviceName string, route *mux.Route, path string, summary string) *Permission {
 	methods, _ := route.GetMethods()
-	path, _ := route.GetPathRegexp()
-	code := strings.Join([]string{serviceName, methods[0], path}, ":")
+	method := strings.ToLower(methods[0])
+	code := strings.Join([]string{serviceName, method, path}, ":")
 	return &Permission{
 		serviceName: serviceName,
-		Name:        fmt.Sprintf("%x", md5.Sum([]byte(code))),
-		Method:      methods[0],
+		Name:        code,
+		Method:      method,
 		Path:        path,
 		Summary:     summary,
 	}
 }
 
 func (p *Permission) String() string {
-	return fmt.Sprintf("%s: %s : %s", p.Name, p.Summary, p.Code())
+	return fmt.Sprintf("%s : %s", p.Name, p.Summary)
 }
 
 // Code return the code of permission

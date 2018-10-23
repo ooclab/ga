@@ -3,8 +3,6 @@ package auth
 import (
 	"fmt"
 	"net/http"
-
-	"github.com/gorilla/mux"
 )
 
 // Auth is the middleware for authorization by swagger ui doc
@@ -16,16 +14,12 @@ func (auth *Auth) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.
 	// do some stuff before
 	fmt.Printf("[Request] %s %s\n", req.Method, req.URL.String())
 	// fmt.Printf("url = %#v\n", auth.spec.url)
-	var match mux.RouteMatch
-	if ok := auth.spec.router.Match(req, &match); ok {
-		fmt.Println("--> matched !")
-		fmt.Printf("match = %#v\n", match)
-		perm := NewPermssion(auth.spec.serviceName, match.Route, "")
-		fmt.Printf("permission = %s, %s\n", perm.Name, perm.Code())
-	} else {
+	perm, err := auth.spec.SearchPermission(req)
+	if err != nil {
 		// TODO: response 404
-		fmt.Println("---> not matched !")
+		fmt.Printf("search permission failed: %s\n", err)
 	}
+	fmt.Printf("match permission: %s\n", perm.Name)
 	next(w, req)
 	// do some stuff after
 }
