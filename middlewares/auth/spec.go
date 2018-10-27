@@ -4,8 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-openapi/loads"
 	"github.com/go-openapi/spec"
@@ -21,6 +24,9 @@ type Spec struct {
 	router      *mux.Router
 	doc         *loads.Document
 
+	// 最大等待 path (url) 的秒数
+	pathReadTimeout int
+
 	// find swagger path by route
 	routePathMap      map[*mux.Route]string
 	routePathMapMutex *sync.Mutex
@@ -29,8 +35,9 @@ type Spec struct {
 // NewSpec create a new Spec struct
 func NewSpec(serviceName, path string) *Spec {
 	return &Spec{
-		serviceName: serviceName,
-		path:        path,
+		serviceName:     serviceName,
+		path:            path,
+		pathReadTimeout: 16, // 16 秒
 
 		routePathMap:      make(map[*mux.Route]string),
 		routePathMapMutex: &sync.Mutex{},
@@ -62,7 +69,7 @@ func (s *Spec) addOperation(method string, path string, op *spec.Operation) {
 
 // Load try to load the swagger spec specified by path
 func (s *Spec) Load() *loads.Document {
-	doc, err := loads.Spec(s.path)
+	doc, err := s.loadSpecAndWait()
 	if err == nil {
 		validate.SetContinueOnErrors(true)         // Set global options
 		errs := validate.Spec(doc, strfmt.Default) // Validates spec with default Swagger 2.0 format definitions
@@ -73,6 +80,7 @@ func (s *Spec) Load() *loads.Document {
 			fmt.Printf("The spec %s has some validation errors: %v\n", s.path, errs)
 		}
 	} else {
+		fmt.Printf("err type = %v\n", reflect.TypeOf(err))
 		fmt.Printf("Could not load spec %s: %v\n", s.path, err)
 	}
 
@@ -105,6 +113,26 @@ func (s *Spec) Load() *loads.Document {
 
 	s.doc = doc
 	return s.doc
+}
+
+func (s *Spec) loadSpecAndWait() (doc *loads.Document, err error) {
+	timeout := 0
+	for {
+		doc, err = loads.Spec(s.path)
+		if err != nil {
+			if e, ok := err.(*url.Error); ok {
+				if strings.HasSuffix(e.Err.Error(), "connection refused") {
+					if timeout < s.pathReadTimeout {
+						fmt.Printf("connection refused: wait for it .")
+						time.Sleep(1 * time.Second)
+						timeout++
+						continue
+					}
+				}
+			}
+		}
+		return
+	}
 }
 
 func (s *Spec) SearchPermission(req *http.Request) (*Permission, error) {
