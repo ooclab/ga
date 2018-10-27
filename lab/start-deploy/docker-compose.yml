@@ -1,0 +1,22 @@
+version: '3'
+services:
+
+    traefik:
+        image: traefik:v1.7.2
+        command: --api --docker
+        ports:
+            - "10080:80"     # The HTTP port
+            - "18080:8080"   # The Web UI (enabled by --api)
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+        networks:
+            - default
+            - traefik
+        labels:
+            - "traefik.enable=false"
+
+
+networks:
+    traefik:
+        external:
+          name: ga-deploy-traefik

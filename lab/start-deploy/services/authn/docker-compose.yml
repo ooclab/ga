@@ -1,0 +1,49 @@
+version: "3"
+services:
+
+    ga:
+        image: ga:v1
+        volumes:
+            - "../../config/authn/keys:/etc/token/keys"
+        command: |
+          /usr/bin/ga serve
+          --port 2999
+          --public_key /etc/token/keys/public_key.pem
+          --backend http://api:3000
+          --swagger_doc http://api:3000/_spec
+          --service_name=authz
+        depends_on:
+            - api
+        networks:
+            - default
+            - traefik
+        labels:
+            traefik.backend: authn
+            traefik.frontend.rule: PathPrefixStrip:/authn
+            traefik.docker.network: ga-deploy-traefik
+
+    api:
+        image: ooclab/authn:v0.9
+        environment:
+            TOKEN_KEY_PATH: /etc/authn/keys
+            DB_URI: "postgresql://root:password@postgres:5432/authn"
+        volumes:
+            - "../../config/authn/keys:/etc/authn/keys"
+        depends_on:
+            - postgres
+        labels:
+            - "traefik.enable=false"
+
+    postgres:
+        image: postgres:10.5
+        environment:
+            POSTGRES_DB: authn
+            POSTGRES_USER: root
+            POSTGRES_PASSWORD: password
+        labels:
+            - "traefik.enable=false"
+
+networks:
+    traefik:
+        external:
+          name: ga-deploy-traefik
