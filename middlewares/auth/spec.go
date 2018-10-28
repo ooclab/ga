@@ -121,9 +121,10 @@ func (s *Spec) loadSpecAndWait() (doc *loads.Document, err error) {
 		doc, err = loads.Spec(s.path)
 		if err != nil {
 			if e, ok := err.(*url.Error); ok {
-				if strings.HasSuffix(e.Err.Error(), "connection refused") {
+				if strings.HasSuffix(e.Err.Error(), "connection refused") ||
+					strings.HasSuffix(e.Err.Error(), "no such host") {
 					if timeout < s.pathReadTimeout {
-						fmt.Printf("connection refused: wait for it .")
+						fmt.Printf(".")
 						time.Sleep(1 * time.Second)
 						timeout++
 						continue
