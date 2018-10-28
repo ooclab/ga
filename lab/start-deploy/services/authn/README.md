@@ -20,3 +20,13 @@ docker-compose up -d
 ```
 docker-compose ps
 ```
+
+
+## 创建 Admin App
+
+创建具有 admin 角色权限的 App :
+
+```
+docker-compose exec api python3 manage.py syncdb
+docker-compose exec api python3 manage.py createadminapp
+```

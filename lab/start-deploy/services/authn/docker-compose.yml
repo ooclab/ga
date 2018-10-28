@@ -11,7 +11,7 @@ services:
           --public_key /etc/token/keys/public_key.pem
           --backend http://api:3000
           --swagger_doc http://api:3000/_spec
-          --service_name=authz
+          --service_name=authn
         depends_on:
             - api
         networks:
