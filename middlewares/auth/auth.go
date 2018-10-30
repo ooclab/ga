@@ -18,7 +18,6 @@ type Auth struct {
 }
 
 func (auth *Auth) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
-	logrus.Debugf("call auth middleware ...")
 	// do some stuff before
 	fmt.Printf("[Request] %s %s\n", req.Method, req.URL.String())
 	// fmt.Printf("url = %#v\n", auth.spec.url)

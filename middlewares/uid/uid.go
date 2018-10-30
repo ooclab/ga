@@ -15,8 +15,6 @@ type UID struct {
 }
 
 func (uid *UID) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
-	logrus.Debugf("call uid middleware ...")
-
 	// do some stuff before
 
 	idToken := getIDToken(req)
@@ -80,7 +78,7 @@ func writeJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 		// logrus.Errorf("marshal json failed: %s", err)
 		statusCode = http.StatusInternalServerError
 	}
-	w.WriteHeader(statusCode)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
 	w.Write(jData)
 }
