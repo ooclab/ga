@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"reflect"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/go-openapi/loads"
 	"github.com/go-openapi/spec"
 	"github.com/go-openapi/strfmt"
@@ -30,6 +31,10 @@ type Spec struct {
 	// find swagger path by route
 	routePathMap      map[*mux.Route]string
 	routePathMapMutex *sync.Mutex
+
+	// find swagger op by permission name
+	permissionMap      map[string]*Permission
+	permissionMapMutex *sync.Mutex
 }
 
 // NewSpec create a new Spec struct
@@ -41,6 +46,9 @@ func NewSpec(serviceName, path string) *Spec {
 
 		routePathMap:      make(map[*mux.Route]string),
 		routePathMapMutex: &sync.Mutex{},
+
+		permissionMap:      make(map[string]*Permission),
+		permissionMapMutex: &sync.Mutex{},
 	}
 }
 
@@ -56,15 +64,35 @@ func (s *Spec) addRoutePath(route *mux.Route, path string) {
 	s.routePathMap[route] = path
 }
 
-func (s *Spec) addOperation(method string, path string, op *spec.Operation) {
-	desc := op.Summary
-	if desc == "" {
-		desc = op.Description
-	}
+func (s *Spec) getPermission(permName string) *Permission {
+	s.permissionMapMutex.Lock()
+	defer s.permissionMapMutex.Unlock()
+	return s.permissionMap[permName]
+}
+
+func (s *Spec) addPermission(perm *Permission) {
+	s.permissionMapMutex.Lock()
+	defer s.permissionMapMutex.Unlock()
+	s.permissionMap[perm.Name] = perm
+}
+
+func (s *Spec) addOperation(method string, path string, spi spec.PathItem) {
 	route := s.router.NewRoute().Methods(method).Path(path)
-	perm := NewPermssion(s.serviceName, route, path, desc)
 	s.addRoutePath(route, path)
-	fmt.Printf("%s\n", perm)
+
+	perm := NewPermssion(s, method, path, &spi)
+	s.addPermission(perm)
+}
+
+// GetPermissionMap 返回 permission 数据
+func (s *Spec) GetPermissionMap() map[string]*Permission {
+	m := make(map[string]*Permission)
+	s.permissionMapMutex.Lock()
+	defer s.permissionMapMutex.Unlock()
+	for key, value := range s.permissionMap {
+		m[key] = value
+	}
+	return m
 }
 
 // Load try to load the swagger spec specified by path
@@ -75,13 +103,19 @@ func (s *Spec) Load() *loads.Document {
 		errs := validate.Spec(doc, strfmt.Default) // Validates spec with default Swagger 2.0 format definitions
 
 		if errs == nil {
-			fmt.Println("This spec is valid")
+			logrus.Debugf("The spec (%s) is valid", s.path)
 		} else {
-			fmt.Printf("The spec %s has some validation errors: %v\n", s.path, errs)
+			logrus.Errorf("The spec (%s) has some validation errors: %v\n", s.path, errs)
 		}
 	} else {
-		fmt.Printf("err type = %v\n", reflect.TypeOf(err))
-		fmt.Printf("Could not load spec %s: %v\n", s.path, err)
+		logrus.Errorf("could not load spec (%s): %v\n", s.path, err)
+		os.Exit(1)
+	}
+
+	doc, err = doc.Expanded(&spec.ExpandOptions{RelativeBase: s.path})
+	if err != nil {
+		logrus.Errorf("failed to expand spec: %s\n", err)
+		os.Exit(1)
 	}
 
 	// s.router = mux.NewRouter().PathPrefix("/api/auth").Subrouter()
@@ -89,25 +123,25 @@ func (s *Spec) Load() *loads.Document {
 
 	for path, v := range doc.Spec().Paths.Paths {
 		if v.Get != nil {
-			s.addOperation("GET", path, v.Get)
+			s.addOperation("GET", path, v)
 		}
 		if v.Post != nil {
-			s.addOperation("POST", path, v.Post)
+			s.addOperation("POST", path, v)
 		}
 		if v.Put != nil {
-			s.addOperation("PUT", path, v.Put)
+			s.addOperation("PUT", path, v)
 		}
 		if v.Delete != nil {
-			s.addOperation("DELETE", path, v.Delete)
+			s.addOperation("DELETE", path, v)
 		}
 		if v.Options != nil {
-			s.addOperation("Options", path, v.Options)
+			s.addOperation("Options", path, v)
 		}
 		if v.Head != nil {
-			s.addOperation("HEAD", path, v.Head)
+			s.addOperation("HEAD", path, v)
 		}
 		if v.Patch != nil {
-			s.addOperation("PATCH", path, v.Patch)
+			s.addOperation("PATCH", path, v)
 		}
 	}
 
@@ -136,15 +170,16 @@ func (s *Spec) loadSpecAndWait() (doc *loads.Document, err error) {
 	}
 }
 
+// SearchPermission 查询匹配当前请求的权限名
 func (s *Spec) SearchPermission(req *http.Request) (*Permission, error) {
 	var match mux.RouteMatch
 	if ok := s.router.Match(req, &match); ok {
 		path := s.getRoutePath(match.Route)
-		perm := NewPermssion(s.serviceName, match.Route, path, "")
+		permName := genPermissionName(s.serviceName, req.Method, path)
+		perm := s.getPermission(permName)
 		return perm, nil
-	} else {
-		return nil, errors.New("not match")
 	}
+	return nil, errors.New("not match")
 }
 
 func getPermissionID(route *mux.Route) string {
@@ -155,32 +190,126 @@ func getPermissionID(route *mux.Route) string {
 
 // Permission store the properites needed by permission
 type Permission struct {
-	serviceName string
-	Name        string
-	Method      string
-	Path        string
-	Summary     string
+	Spec   *Spec
+	Name   string
+	method string
+	path   string
+	spi    *spec.PathItem
+	op     *spec.Operation
+	roles  []string
+}
+
+func genPermissionName(serviceName, method, path string) string {
+	return strings.Join([]string{serviceName, strings.ToLower(method), path}, ":")
 }
 
 // NewPermssion create a new Permission object
-func NewPermssion(serviceName string, route *mux.Route, path string, summary string) *Permission {
-	methods, _ := route.GetMethods()
-	method := strings.ToLower(methods[0])
-	code := strings.Join([]string{serviceName, method, path}, ":")
+func NewPermssion(gaspec *Spec, method string, path string, spi *spec.PathItem) *Permission {
+	var op *spec.Operation
+	switch method {
+	case "GET":
+		op = spi.Get
+	case "POST":
+		op = spi.Post
+	case "PUT":
+		op = spi.Put
+	case "DELETE":
+		op = spi.Delete
+	case "OPTIONS":
+		op = spi.Options
+	case "HEAD":
+		op = spi.Head
+	case "PATCH":
+		op = spi.Patch
+	}
 	return &Permission{
-		serviceName: serviceName,
-		Name:        code,
-		Method:      method,
-		Path:        path,
-		Summary:     summary,
+		Spec:   gaspec,
+		Name:   genPermissionName(gaspec.serviceName, method, path),
+		method: strings.ToLower(method),
+		path:   path,
+		spi:    spi,
+		op:     op,
 	}
 }
 
+// Roles 返回该权限需要的角色
+func (p *Permission) Roles() []string {
+	if p.roles != nil {
+		return p.roles
+	}
+
+	p.roles = []string{}
+
+	// 1. 检查自定义的权限
+	extensions := p.op.VendorExtensible.Extensions
+	if extensions != nil {
+		for extName, extValue := range extensions {
+			if extName == "x-roles" {
+				for _, roleName := range extValue.([]interface{}) {
+					p.roles = append(p.roles, roleName.(string))
+				}
+				break
+			}
+		}
+	}
+	if len(p.roles) != 0 {
+		return p.roles
+	}
+
+	// 2. 如果没有自定义权限再判断 Authorization 判断
+	if needAuth(p.spi.PathItemProps.Parameters) || needAuth(p.op.OperationProps.Parameters) {
+		p.roles = append(p.roles, "authenticated")
+		return p.roles
+	}
+
+	// 3. 如果其他权限都没有，表明只需要匿名权限
+	p.roles = append(p.roles, "anonymous")
+	return p.roles
+}
+
+// Summary 返回权限描述
+func (p *Permission) Summary() string {
+	desc := p.op.Summary
+	if desc == "" {
+		desc = p.op.Description
+	}
+	return desc
+}
+
 func (p *Permission) String() string {
-	return fmt.Sprintf("%s : %s", p.Name, p.Summary)
+	return fmt.Sprintf("%s : %s", p.Name, p.Summary())
 }
 
 // Code return the code of permission
 func (p *Permission) Code() string {
-	return fmt.Sprintf("%s:%s:%s", p.serviceName, p.Method, p.Path)
+	return fmt.Sprintf("%s:%s:%s", p.Spec.serviceName, p.method, p.path)
+}
+
+// NeedPermission 是否需要权限
+func (p *Permission) NeedPermission() bool {
+	for _, roleName := range p.Roles() {
+		if roleName == "anonymous" {
+			return false
+		}
+	}
+	return true
+}
+
+// JustAuthenticated 检测是否仅仅需要登录权限
+func (p *Permission) JustAuthenticated() bool {
+	for _, roleName := range p.Roles() {
+		if roleName == "authenticated" {
+			return true
+		}
+	}
+	return false
+}
+
+func needAuth(parameters []spec.Parameter) bool {
+	for _, parameter := range parameters {
+		if parameter.ParamProps.Name == "Authorization" {
+			return true
+		}
+	}
+	return false
 }

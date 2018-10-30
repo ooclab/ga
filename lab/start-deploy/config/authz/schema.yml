@@ -1,0 +1,1099 @@
+swagger: '2.0'
+info:
+  version: '1.0'
+  title: 'authz'
+  description: |
+    `AuthZ Service` -- 提供权限校验服务
+
+    ## 约定
+
+    - 命名中英文无论单复数尽量统一用单数形式
+    - 表示时间的字符串如无特别说明，统一指 RFC3339 UTC 格式，示例： `2017-05-30T01:45:39.871980Z`
+
+  contact:
+    name: OOCLAB
+    url: 'https://ooclab.com'
+    email: info@ooclab.com
+
+host: localhost:3000
+schemes:
+- http
+
+tags:
+- name: authz
+  description: 鉴权
+- name: user
+  description: 用户
+- name: role
+  description: 角色
+- name: permission
+  description: 权限
+
+paths:
+
+  "/_spec":
+    get:
+      tags:
+      - default
+      x-roles:
+      - authz-admin3
+      - apiview3
+      summary: 获取 YAML 格式的 SwaggerUI 文档（即本文档）
+      produces:
+      - application/yaml
+      responses:
+        "200":
+          description: 返回 YAML 文档
+
+  "/_health":
+    get:
+      tags:
+      - default
+      summary: 查看健康状态
+      responses:
+        "200":
+          description: 返回 "ok" 表示服务运行健康
+
+  "/has_permission":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+
+    get:
+      tags:
+      - authz
+      summary: 检查用户权限（GET方法）
+      description: |
+        提供 GET 方法是为了方便一些名称正常的场景
+      parameters:
+      - name: user_id
+        in: query
+        required: true
+        type: string
+        format: uuid
+        description: 用户ID
+      - name: permission_name
+        in: query
+        required: true
+        type: string
+        maxLength: 512
+        description: 权限名称
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/HasPermissionResponse'
+        default:
+          description: 返回错误信息
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    post:
+      tags:
+      - authz
+      summary: 检查指定用户是否有对应的权限（使用权限名称）
+      description: |
+        说明：
+        1. `permission` 放在 body 里，是因为 permission 可能名称很特别。放在 URL 不合适。
+        2. 设计为 POST 方法，是因为有 Body 参数。
+        3. 不支持权限列表检测，是因为暂时没有想到哪个场景必须。
+      parameters:
+      - $ref: '#/parameters/Authorization'
+      - name: body
+        in: body
+        schema:
+          type: object
+          required:
+          - user_id
+          - permission_name
+          properties:
+            user_id:
+              type: string
+              format: uuid
+              description: 用户ID
+            permission_name:
+              type: string
+              description: 权限名称
+              maxLength: 512
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/DefaultSuccessResponse'
+        default:
+          description: 返回错误信息
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/has_permission_id":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+
+    get:
+      tags:
+      - authz
+      summary: 检查用户权限（GET方法）
+      description: |
+        提供 GET 方法是为了方便一些名称正常的场景
+      parameters:
+      - name: user_id
+        in: query
+        required: true
+        type: string
+        format: uuid
+        description: 用户ID
+      - name: permission_id
+        in: query
+        required: true
+        type: string
+        format: uuid
+        description: 权限名称
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+        default:
+          description: 返回错误信息
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    post:
+      tags:
+      - authz
+      summary: 检查指定用户是否有对应的权限（使用权限ID）
+      parameters:
+      - name: body
+        in: body
+        schema:
+          type: object
+          required:
+          - user_id
+          - permission_id
+          properties:
+            user_id:
+              type: string
+              format: uuid
+              description: 用户ID
+            permission_id:
+              type: string
+              format: uuid
+              description: 权限ID
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/DefaultSuccessResponse'
+        default:
+          description: 返回错误信息
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/user/{id}/role":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+    - $ref: '#/parameters/PathUserID'
+
+    get:
+      tags:
+      - user
+      summary: 获取用户的角色
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            required:
+            - data
+            properties:
+              data:
+                type: array
+                items:
+                  $ref: '#/definitions/RoleSimple'
+        default:
+          description: 返回错误信息
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/user/{id}/role/append":
+
+    post:
+      tags:
+      - user
+      summary: 增加用户的角色
+      parameters:
+      - $ref: '#/parameters/Authorization'
+      - $ref: '#/parameters/PathRoleID'
+      - name: body
+        in: body
+        schema:
+          type: object
+          properties:
+            roles:
+              type: array
+              items:
+                type: string
+                format: uuid
+                description: 角色ID
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/DefaultSuccessResponse'
+        default:
+          description: 返回错误信息
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                default: "have-not-exist"
+              data:
+                type: array
+                items:
+                  type: string
+                  format: uuid
+                  description: 角色ID
+
+  "/user/{id}/role/remove":
+
+    post:
+      tags:
+      - user
+      summary: 删除用户的角色
+      parameters:
+      - $ref: '#/parameters/Authorization'
+      - $ref: '#/parameters/PathRoleID'
+      - name: body
+        in: body
+        schema:
+          type: object
+          properties:
+            roles:
+              type: array
+              items:
+                type: string
+                format: uuid
+                description: 角色ID
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/DefaultSuccessResponse'
+        default:
+          description: 返回错误信息
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                default: "have-not-exist"
+              data:
+                type: array
+                items:
+                  type: string
+                  format: uuid
+                  description: 角色ID
+
+  "/my/permission":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+
+    get:
+      tags:
+      - permission
+      summary: 获取我的权限列表（登录用户）
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            properties:
+              status:
+                $ref: '#/definitions/Status'
+              data:
+                type: array
+                items:
+                  $ref: '#/definitions/RoleWithPermissions'
+        default:
+          description: 返回错误信息
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/permission":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+
+    get:
+      tags:
+      - permission
+      summary: 获取权限列表
+      parameters:
+      - $ref: '#/parameters/PageSize'
+      - $ref: '#/parameters/Page'
+      - $ref: '#/parameters/ASC'
+      - name: sort_by
+        in: query
+        type: string
+        description: 排序依据的属性
+        enum:
+        - created
+        - name
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            required:
+            - data
+            - filter
+            properties:
+              status:
+                $ref: '#/definitions/Status'
+              data:
+                type: array
+                items:
+                  $ref: '#/definitions/PermissionSimple'
+              filter:
+                $ref: '#/definitions/PageFilter'
+        default:
+          description: 返回错误信息
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    post:
+      tags:
+      - permission
+      summary: 创建权限
+      x-roles:
+      - admin
+      parameters:
+      - name: body
+        in: body
+        schema:
+          type: object
+          required:
+          - name
+          properties:
+            name:
+              type: string
+              description: 名称（必须全局唯一）
+              minLength: 2
+              maxLength: 128
+            summary:
+              type: string
+              description: 描述
+              maxLength: 256
+            description:
+              type: string
+              description: 详细描述
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ObjectCreateSuccess'
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `name-exist` : 名字已经存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/permission/{id}":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+    - $ref: '#/parameters/PathPermissionID'
+
+    get:
+      tags:
+      - permission
+      summary: 查看指定权限详情
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                default: "success"
+              data:
+                $ref: '#/definitions/Permission'
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 名称不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    post:
+      tags:
+      - permission
+      summary: 更新指定权限信息
+      parameters:
+      - name: body
+        in: body
+        schema:
+          type: object
+          properties:
+            summary:
+              type: string
+              description: 描述
+              maxLength: 256
+            description:
+              type: string
+              description: 详细描述
+              maxLength: 8192
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/DefaultSuccessResponse'
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 名称不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    delete:
+      tags:
+      - permission
+      summary: 删除指定权限
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/DefaultSuccessResponse'
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 名称不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/my/role":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+
+    get:
+      tags:
+      - role
+      summary: 获取我的角色列表（登录用户）
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            required:
+            - data
+            properties:
+              data:
+                type: array
+                items:
+                  $ref: '#/definitions/RoleSimple'
+        default:
+          description: 返回错误信息
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/role":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+
+    get:
+      tags:
+      - role
+      summary: 获取所有角色列表
+      parameters:
+      - $ref: '#/parameters/PageSize'
+      - $ref: '#/parameters/Page'
+      - $ref: '#/parameters/ASC'
+      - name: sort_by
+        in: query
+        type: string
+        description: 排序依据的属性
+        enum:
+        - created
+        - name
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            required:
+            - data
+            - filter
+            properties:
+              data:
+                type: array
+                items:
+                  $ref: '#/definitions/RoleSimple'
+              filter:
+                $ref: '#/definitions/PageFilter'
+        default:
+          description: 返回错误信息
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    post:
+      tags:
+      - role
+      summary: 创建新角色
+      parameters:
+      - name: body
+        in: body
+        schema:
+          type: object
+          required:
+          - name
+          properties:
+            name:
+              type: string
+              description: 名称（必须全局唯一）
+              minLength: 2
+              maxLength: 128
+            summary:
+              type: string
+              description: 描述
+              maxLength: 256
+            description:
+              type: string
+              description: 详细描述
+      responses:
+        "200":
+          description: OK
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `name-exist` : 名字已经存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/role/id":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+
+    get:
+      tags:
+      - role
+      summary: 通过给定的角色名获取角色ID
+      parameters:
+      - name: name
+        in: query
+        required: true
+        description: 角色名
+        type: string
+        maxLength: 64
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                default: "success"
+              id:
+                type: string
+                format: uuid
+                description: 角色ID
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 名称不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/role/{id}":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+    - $ref: '#/parameters/PathRoleID'
+
+    get:
+      tags:
+      - role
+      summary: 获取指定角色详情
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                default: "success"
+              data:
+                $ref: '#/definitions/Role'
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 名称不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    post:
+      tags:
+      - role
+      summary: 更新指定角色信息
+      parameters:
+      - name: body
+        in: body
+        schema:
+          type: object
+          properties:
+            summary:
+              type: string
+              description: 描述
+              maxLength: 256
+            description:
+              type: string
+              description: 详细描述
+              maxLength: 8192
+      responses:
+        "200":
+          description: OK
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 名称不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    delete:
+      tags:
+      - role
+      summary: 删除指定角色
+      responses:
+        "200":
+          description: OK
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 名称不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/role/{id}/permission":
+
+    get:
+      tags:
+      - role
+      summary: 获取指定角色的权限列表
+      parameters:
+      - $ref: '#/parameters/Authorization'
+      - $ref: '#/parameters/PathRoleID'
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            required:
+            - data
+            properties:
+              data:
+                type: array
+                items:
+                  $ref: '#/definitions/PermissionSimple'
+        default:
+          description: 返回错误信息
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+
+  "/role/{id}/permission/append":
+
+    post:
+      tags:
+      - role
+      summary: 为指定角色增加权限
+      parameters:
+      - $ref: '#/parameters/Authorization'
+      - $ref: '#/parameters/PathRoleID'
+      - name: body
+        in: body
+        schema:
+          type: object
+          properties:
+            permissions:
+              type: array
+              items:
+                type: string
+                format: uuid
+                description: 权限ID
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/DefaultSuccessResponse'
+        default:
+          description: 返回错误信息
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                default: "have-not-exist"
+              data:
+                type: array
+                items:
+                  type: string
+                  format: uuid
+                  description: 权限ID
+
+  "/role/{id}/permission/remove":
+
+    post:
+      tags:
+      - role
+      summary: 删除指定角色的权限
+      parameters:
+      - $ref: '#/parameters/Authorization'
+      - $ref: '#/parameters/PathRoleID'
+      - name: body
+        in: body
+        schema:
+          type: object
+          properties:
+            permissions:
+              type: array
+              items:
+                type: string
+                format: uuid
+                description: 权限ID
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/DefaultSuccessResponse'
+        default:
+          description: 返回错误信息
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                default: "have-not-exist"
+              data:
+                type: array
+                items:
+                  type: string
+                  format: uuid
+                  description: 权限ID
+
+
+definitions:
+
+  Status:
+    type: string
+    description: |
+      接口请求结果
+
+      - `success` 表示成功
+      - 其他表示错误
+    default: "success"
+
+  ObjectCreateSuccess:
+    type: object
+    properties:
+      status:
+        $ref: '#/definitions/Status'
+      id:
+        type: string
+        format: uuid
+        description: 成功创建的权限ID
+
+  DefaultSuccessResponse:
+    type: object
+    required:
+    - status
+    properties:
+      status:
+        type: string
+        description: 接口调用结果
+        default: "success"
+
+  DefaultErrorResponse:
+    type: object
+    required:
+    - status
+    properties:
+      status:
+        type: string
+        description: 错误字符串
+      message:
+        type: string
+        description: 错误描述信息
+      errors:
+        type: string
+        description: 有多个错误值时（通常发生在验证表单失败时）
+      data:
+        type: object
+        properties:
+          status_code:
+            type: integer
+            format: int
+            description: 错误码
+          exc_info:
+            type: string
+            description: 详细错误信息
+
+  HasPermissionResponse:
+    type: object
+    required:
+    - status
+    properties:
+      status:
+        type: string
+        description: |
+          检查结果
+
+          - `yes` : 表明该用户有指定的权限
+          - `no` : 表示该用户无指定的权限
+        enum:
+        - yes
+        - no
+
+  RoleSimple:
+    type: object
+    required:
+    - id
+    - name
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: 角色ID
+      name:
+        type: string
+        description: 角色名称（全局唯一）
+      summary:
+        type: string
+        description: 角色描述
+
+  RoleWithPermissions:
+    type: object
+    required:
+    - id
+    - name
+    - permissions
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: 角色ID
+      name:
+        type: string
+        description: 角色名称（全局唯一）
+      summary:
+        type: string
+        description: 角色描述
+      permissions:
+        type: array
+        items:
+          $ref: '#/definitions/PermissionSimple'
+
+  Role:
+    type: object
+    description: 角色
+    required:
+    - id
+    - name
+    - summary
+    - created
+    - updated
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: 角色ID
+      name:
+        type: string
+        description: 名字
+      summary:
+        type: string
+        description: 描述
+      description:
+        type: string
+        description: 详细描述
+      created:
+        type: string
+        format: date-time
+        description: 创建时间
+      updated:
+        type: string
+        format: date-time
+        description: 更新时间
+
+  PermissionSimple:
+    type: object
+    required:
+    - name
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: 权限ID
+      name:
+        type: string
+        description: 权限名称（全局唯一）
+        maxLength: 64
+      summary:
+        type: string
+        description: 权限描述
+        maxLength: 256
+
+  Permission:
+    type: object
+    description: 权限
+    required:
+    - id
+    - name
+    - summary
+    - created
+    - updated
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: 权限ID
+      name:
+        type: string
+        description: 名字
+      summary:
+        type: string
+        description: 描述
+      description:
+        type: string
+        description: 详细描述
+      created:
+        type: string
+        format: date-time
+        description: 创建时间
+      updated:
+        type: string
+        format: date-time
+        description: 更新时间
+
+
+  PageFilter:
+    type: object
+    description: 数据过滤选项
+    required:
+    - page_size
+    - page
+    - total
+    - sort_by
+    - asc
+    properties:
+      page_size:
+        type: integer
+        format: int
+        minimum: 10
+        maximum: 100
+        default: 10
+        description: 分页大小
+      page:
+        type: integer
+        format: int
+        minimum: 1
+        default: 1
+        description: 当前返回页
+      total:
+        type: integer
+        format: int
+        description: 总数
+      sort_by:
+        type: string
+        description: 排序属性
+      asc:
+        type: boolean
+        default: false
+        description: 是否为正序排列？
+
+
+parameters:
+
+  Authorization:
+    name: Authorization
+    in: header
+    type: string
+    description: 提供 JWT Token, 格式 `"Bearer {TOKEN}"`
+    required: true
+
+  PathUserID:
+    name: id
+    in: path
+    required: true
+    type: string
+    format: uuid
+    description: 用户ID
+
+  PathRoleID:
+    name: id
+    in: path
+    required: true
+    type: string
+    format: uuid
+    description: 角色ID
+
+  PathPermissionID:
+    name: id
+    in: path
+    required: true
+    type: string
+    format: uuid
+    description: 权限ID
+
+  ASC:
+    name: asc
+    in: query
+    type: string
+    default: "false"
+    enum:
+    - "true"
+    - "false"
+    - "1"
+    - "0"
+    description: 表示是否使用升序排列，默认为降序
+
+  Page:
+    name: page
+    in: query
+    type: integer
+    format: int
+    default: 1
+    minimum: 1
+    description: 需要查看的页数
+
+  PageSize:
+    name: page_size
+    in: query
+    type: integer
+    format: int
+    default: 10
+    minimum: 10
+    maximum: 100
+    description: 页数大小
+
+externalDocs:
+  description: "更多详细文档"
+  url: "https://github.com/ooclab/authz"

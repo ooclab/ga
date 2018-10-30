@@ -95,6 +95,7 @@ func getRedirectHandler(pubKey []byte, backendServer string) http.Handler {
 func NewSingleHostReverseProxy(target *url.URL) *httputil.ReverseProxy {
 	targetQuery := target.RawQuery
 	director := func(req *http.Request) {
+		logrus.Debugf("call proxy director ...")
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
 		req.URL.Path = singleJoiningSlash(target.Path, req.URL.Path)

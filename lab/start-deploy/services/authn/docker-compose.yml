@@ -5,8 +5,9 @@ services:
         image: ga:v1
         volumes:
             - "../../config/authn/keys:/etc/token/keys"
+            - "../../config/ga/config.toml:/etc/ga/config.toml"
         command: |
-          /usr/bin/ga serve
+          /usr/bin/ga serve -v
           --port 2999
           --public_key /etc/token/keys/public_key.pem
           --backend http://api:3000
@@ -26,7 +27,7 @@ services:
         image: ooclab/authn:v0.9
         environment:
             TOKEN_KEY_PATH: /etc/authn/keys
-            DB_URI: "postgresql://root:password@postgres:5432/authn"
+            DB_URI: "postgresql+pg8000://root:password@postgres:5432/authn"
         volumes:
             - "../../config/authn/keys:/etc/authn/keys"
         depends_on:

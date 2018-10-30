@@ -15,6 +15,8 @@ type UID struct {
 }
 
 func (uid *UID) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
+	logrus.Debugf("call uid middleware ...")
+
 	// do some stuff before
 
 	idToken := getIDToken(req)
@@ -22,7 +24,7 @@ func (uid *UID) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.Ha
 		uid, err := getUserID(idToken, uid.pubKey)
 		if err != nil {
 			logrus.Errorf("get uid failed: %s", err)
-			writeJSON(w, 403, map[string]string{"error": err.Error()})
+			writeJSON(w, 403, map[string]string{"status": err.Error()})
 			return
 		}
 		req.Header["X-User-Id"] = []string{uid}

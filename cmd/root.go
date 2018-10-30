@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"github.com/Sirupsen/logrus"
@@ -9,11 +10,28 @@ import (
 	"github.com/spf13/viper"
 )
 
-var inDebugMode bool
+var configExample = []byte(`# This is a TOML document.
+
+title = "ga config"
+
+[service]
+
+	[service.authn]
+	baseurl = "http://127.0.0.1:10080/authn"
+	app_id = ""
+	app_secret = ""
+
+	[service.authz]
+	baseurl = "http://127.0.0.1:10080/authz"
+`)
+
+// Verbose 输出详细日志
+var Verbose bool
 var cfgFile string
 
+// rootCmd 是主命令对象
 var rootCmd = &cobra.Command{
-	Use:   "ga",
+	Use:   "ga SUBCOMMAND ARGS",
 	Short: "A lightweight middleware for service-oriented architecture",
 }
 
@@ -26,15 +44,23 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
+	cobra.OnInitialize(initRootConfig)
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default is $HOME/.ga/config.toml)")
-	rootCmd.PersistentFlags().BoolVarP(&inDebugMode, "debug", "d", false, "show debug log")
+	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().BoolP("example-config", "", false, "dump a example config")
 }
 
-func initConfig() {
+func initRootConfig() {
 
-	if inDebugMode {
+	if Verbose {
 		logrus.SetLevel(logrus.DebugLevel)
+	}
+
+	if rootCmd.Flags().Lookup("example-config").Value.String() == "true" {
+		configPath := "example-config.toml"
+		ioutil.WriteFile(configPath, configExample, 0644)
+		fmt.Printf("save the example config to %s\n", configPath)
+		os.Exit(0)
 	}
 
 	if cfgFile != "" {
