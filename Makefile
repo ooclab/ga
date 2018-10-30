@@ -7,8 +7,8 @@ GOTEST=$(GOCMD) test
 GODEP=$(GOTEST) -i
 GOFMT=gofmt -w
 # LDFLAGS=-ldflags "-s"
-LDFLAGS=-ldflags "-s -X main.buildstamp=`date '+%Y-%m-%d_%H:%M:%S_%z'` -X main.githash=`git rev-parse HEAD`"
-STATIC_LDFLAGS=-a -installsuffix cgo -ldflags "-s -X main.buildstamp=`date '+%Y-%m-%d_%H:%M:%S_%z'` -X main.githash=`git rev-parse HEAD`"
+LDFLAGS=-ldflags "-s -X main.buildstamp=`date -u '+%Y-%m-%dT%H:%M:%SZ'` -X main.githash=`git rev-parse HEAD | cut -c1-8`"
+STATIC_LDFLAGS=-a -installsuffix cgo -ldflags "-s -X main.buildstamp=`date -u '+%Y-%m-%dT%H:%M:%SZ'` -X main.githash=`git rev-parse HEAD | cut -c1-8`"
 
 PROGRAM_NAME=ga
 

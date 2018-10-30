@@ -1,6 +1,8 @@
 package main
 
 import (
+	"time"
+
 	"github.com/Sirupsen/logrus"
 	"github.com/ooclab/ga/cmd"
 	"github.com/spf13/viper"
@@ -16,12 +18,12 @@ var (
 func init() {
 	logrus.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp:   true,
-		TimestampFormat: "01/02 15:04:05",
+		TimestampFormat: time.RFC3339Nano,
 	})
 
-	viper.Set("ProgramVersion", programVersion)
-	viper.Set("ProgramBuildStamp", buildstamp)
-	viper.Set("ProgramGitHash", githash)
+	viper.Set("program.version", programVersion)
+	viper.Set("program.buildstamp", buildstamp)
+	viper.Set("program.githash", githash)
 }
 
 func main() {

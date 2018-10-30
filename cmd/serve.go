@@ -1,3 +1,13 @@
+// cmd
+// Example:
+// ga serve \
+//     --service authz \
+//     --backend http://127.0.0.1:3000 \
+//     --port 2999
+//
+// `--service` specify the name of this service, this is the relative path in etcd, for example: `/service/authz`
+// `--backend` specify the backend server
+
 package cmd
 
 import (
@@ -15,27 +25,18 @@ var serveCmd = &cobra.Command{
 	Use:   "serve ARGS",
 	Short: "start ga serve",
 	Run:   serve.Run,
+	PreRun: func(cmd *cobra.Command, args []string) {
+		viper.SetEnvPrefix("GA") // will be uppercased automatically
+		viper.BindEnv("PORT", "SERVICE", "BACKEND")
+
+		viper.BindPFlag("port", cmd.Flags().Lookup("port"))
+		viper.BindPFlag("service", cmd.Flags().Lookup("service"))
+		viper.BindPFlag("backend", cmd.Flags().Lookup("backend"))
+	},
 }
 
 func init() {
-
-	// cobra.OnInitialize(initConfig)
-
-	serveCmd.Flags().Int("port", 2999, "Port to run ga serve on")
-	serveCmd.Flags().StringP("service_name", "", "", "The service name")
-	serveCmd.Flags().StringP("public_key", "", "", "the path of public key")
-	serveCmd.Flags().StringP("backend", "b", "http://127.0.0.1:3000", "the backend server to forward")
-	serveCmd.Flags().StringP("swagger_doc", "", "http://127.0.0.1:3000", "the swagger document path")
-
-	serveCmd.MarkFlagRequired("service_name")
-	serveCmd.MarkFlagRequired("public_key")
-
-	viper.BindPFlag("port", serveCmd.Flags().Lookup("port"))
-	viper.BindPFlag("service_name", serveCmd.Flags().Lookup("service_name"))
-	viper.BindPFlag("public_key", serveCmd.Flags().Lookup("public_key"))
-	viper.BindPFlag("backend", serveCmd.Flags().Lookup("backend"))
-	viper.BindPFlag("swagger_doc", serveCmd.Flags().Lookup("swagger_doc"))
-
-	// viper.SetDefault("author", "NAME HERE <EMAIL ADDRESS>")
-	// viper.SetDefault("license", "apache")
+	serveCmd.Flags().Int("port", 2999, "port to run ga serve on")
+	serveCmd.Flags().StringP("service", "s", "", "the service name")
+	serveCmd.Flags().StringP("backend", "b", "", "the backend server")
 }
