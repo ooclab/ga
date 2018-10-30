@@ -81,8 +81,10 @@ func writeJSON(w http.ResponseWriter, statusCode int, data interface{}) {
 		// logrus.Errorf("marshal json failed: %s", err)
 		statusCode = http.StatusInternalServerError
 	}
-	w.WriteHeader(statusCode)
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("ABC", "123")
+
+	// !Important! Headers can only be written once
+	// https://stackoverflow.com/questions/39427544/golang-http-response-headers-being-removed
+	w.WriteHeader(statusCode)
 	w.Write(jData)
 }
