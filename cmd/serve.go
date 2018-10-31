@@ -27,16 +27,18 @@ var serveCmd = &cobra.Command{
 	Run:   serve.Run,
 	PreRun: func(cmd *cobra.Command, args []string) {
 		viper.SetEnvPrefix("GA") // will be uppercased automatically
-		viper.BindEnv("PORT", "SERVICE", "BACKEND")
+		viper.BindEnv("PORT", "SERVICE", "BACKEND", "ETCD_ENDPOINTS")
 
 		viper.BindPFlag("port", cmd.Flags().Lookup("port"))
 		viper.BindPFlag("service", cmd.Flags().Lookup("service"))
 		viper.BindPFlag("backend", cmd.Flags().Lookup("backend"))
+		viper.BindPFlag("etcd_endpoints", cmd.Flags().Lookup("etcd_endpoints"))
 	},
 }
 
 func init() {
 	serveCmd.Flags().Int("port", 2999, "port to run ga serve on")
+	serveCmd.Flags().String("etcd_endpoints", "etcd:2379", "the etcd endpoints")
 	serveCmd.Flags().StringP("service", "s", "", "the service name")
-	serveCmd.Flags().StringP("backend", "b", "", "the backend server")
+	serveCmd.Flags().StringP("backend", "b", "http://api:3000", "the backend server")
 }

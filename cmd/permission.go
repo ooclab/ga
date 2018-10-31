@@ -18,20 +18,18 @@ var permissionCmd = &cobra.Command{
 }
 
 func init() {
-	cobra.OnInitialize(initPermissionAddConfig)
 	permissionAddCmd.Flags().StringP("service_name", "n", "", "The service name")
 	permissionAddCmd.Flags().StringP("service_doc", "f", "", "the file path for swaggerui api document")
 	permissionAddCmd.MarkFlagRequired("service_name")
 	permissionAddCmd.MarkFlagRequired("service_doc")
 }
 
-func initPermissionAddConfig() {
-	viper.BindPFlag("permission_service_name", permissionAddCmd.Flags().Lookup("service_name"))
-	viper.BindPFlag("permission_service_doc", permissionAddCmd.Flags().Lookup("service_doc"))
-}
-
 var permissionAddCmd = &cobra.Command{
 	Use:   "add",
 	Short: "add permission",
 	Run:   permission.Run,
+	PreRun: func(cmd *cobra.Command, args []string) {
+		viper.BindPFlag("permission_service_name", cmd.Flags().Lookup("service_name"))
+		viper.BindPFlag("permission_service_doc", cmd.Flags().Lookup("service_doc"))
+	},
 }
