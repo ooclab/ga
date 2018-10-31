@@ -6,25 +6,9 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
-var configExample = []byte(`# This is a TOML document.
-
-title = "ga config"
-
-[service]
-
-	[service.authn]
-	baseurl = "http://127.0.0.1:10080/authn"
-	app_id = ""
-	app_secret = ""
-
-	[service.authz]
-	baseurl = "http://127.0.0.1:10080/authz"
-`)
-
-// Verbose 输出详细日志
-var Verbose bool
 var cfgFile string
 
 // rootCmd 是主命令对象
@@ -42,12 +26,17 @@ func Execute() {
 }
 
 func init() {
+	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
 	cobra.OnInitialize(initRootConfig)
-	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
 }
 
 func initRootConfig() {
-	if Verbose {
+	viper.SetEnvPrefix("GA") // will be uppercased automatically
+	viper.BindEnv("DEBUG")
+	viper.BindPFlag("debug", rootCmd.Flags().Lookup("verbose"))
+
+	verbose := viper.GetBool("debug")
+	if verbose {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 }
