@@ -31,9 +31,13 @@ func Run(cmd *cobra.Command, args []string) {
 
 	logrus.Debugf("service name = %s\n", serviceName)
 	logrus.Debugf("service doc = %s\n", serviceDoc)
+	// loads openapi spec
+	doc, err := auth.LoadSpecFromPath(serviceDoc)
+	if err != nil {
+		return
+	}
 
-	spec := auth.NewSpec(serviceName, serviceDoc)
-	spec.Load()
+	spec := auth.NewSpec(serviceName, doc)
 
 	// app := service.NewApp()
 	// if err := app.CheckAccess(); err != nil {
@@ -42,14 +46,9 @@ func Run(cmd *cobra.Command, args []string) {
 	// }
 
 	authClient := service.NewAuth()
-	if err := authClient.Connect(); err != nil {
-		logrus.Errorf("auth client connect failed: %s\n", err)
-		return
-	}
 
-	var err error
 	for k, v := range spec.GetPermissionMap() {
-		if err = authClient.AddPermission(k, v.Roles()); err != nil {
+		if err := authClient.AddPermission(k, v.Roles()); err != nil {
 			logrus.Errorf("add permission failed: %s\n", err)
 			return
 		}

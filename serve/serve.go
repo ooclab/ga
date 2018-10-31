@@ -3,7 +3,6 @@ package serve
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/codegangsta/negroni"
+	"github.com/go-openapi/loads"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -23,17 +23,39 @@ import (
 
 // Run run cobra subcommand
 func Run(cmd *cobra.Command, args []string) {
+	// check port
 	port := viper.GetInt("port")
-	backendAddr := viper.GetString("backend")
-	pubKeyPath := viper.GetString("public_key")
-
-	pubKey, err := ioutil.ReadFile(pubKeyPath)
-	if err != nil {
-		logrus.Errorf("read public key from file %s failed: %s", pubKeyPath, err)
+	if port < 80 || port > 50000 {
+		logrus.Errorf("port must >=80 or <= 5000 !")
 		os.Exit(1)
 	}
+	for _, e := range os.Environ() {
+		fmt.Println(e)
+	}
+	// check service name
+	serviceName := viper.GetString("service")
+	if serviceName == "" {
+		logrus.Debugf("all settings: \n%s\n", viper.AllSettings())
+		logrus.Errorf("the service name must not be empty !")
+		os.Exit(2)
+	}
 
-	h := getRedirectHandler(pubKey, backendAddr)
+	// TODO: check backend is health
+	backendServer := viper.GetString("backend")
+
+	// check public key
+	pubKey, err := uid.LoadPublicKey()
+	if err != nil {
+		return
+	}
+
+	// loads openapi spec
+	doc, err := auth.LoadSpec(serviceName)
+	if err != nil {
+		return
+	}
+
+	h := getRedirectHandler(pubKey, backendServer, serviceName, doc)
 	runServe(port, h)
 }
 
@@ -65,7 +87,7 @@ func runServe(port int, h http.Handler) {
 	<-idleConnsClosed
 }
 
-func getRedirectHandler(pubKey []byte, backendServer string) http.Handler {
+func getRedirectHandler(pubKey []byte, backendServer string, serviceName string, doc *loads.Document) http.Handler {
 
 	backendURL, err := url.Parse(backendServer)
 	if err != nil {
@@ -74,12 +96,9 @@ func getRedirectHandler(pubKey []byte, backendServer string) http.Handler {
 	}
 	proxy := NewSingleHostReverseProxy(backendURL)
 
-	serviceName := viper.GetString("service_name")
-	swaggerPath := viper.GetString("swagger_doc")
-
 	n := negroni.New()
 	n.Use(uid.NewMiddleware(pubKey))
-	n.Use(auth.NewMiddleware(serviceName, swaggerPath))
+	n.Use(auth.NewMiddleware(serviceName, doc))
 	n.UseHandler(proxy)
 
 	return n
@@ -95,7 +114,6 @@ func getRedirectHandler(pubKey []byte, backendServer string) http.Handler {
 func NewSingleHostReverseProxy(target *url.URL) *httputil.ReverseProxy {
 	targetQuery := target.RawQuery
 	director := func(req *http.Request) {
-		logrus.Debugf("call proxy director ...")
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
 		req.URL.Path = singleJoiningSlash(target.Path, req.URL.Path)

@@ -6,13 +6,9 @@ services:
         volumes:
             - "../../config/authn/keys:/etc/token/keys"
             - "../../config/ga/config.toml:/etc/ga/config.toml"
-        command: |
-          /usr/bin/ga serve -v
-          --port 2999
-          --public_key /etc/token/keys/public_key.pem
-          --backend http://api:3000
-          --swagger_doc http://api:3000/_spec
-          --service_name=authz
+        environment:
+            GA_DEBUG: "true"
+            GA_SERVICE: authz
         depends_on:
             - api
         networks:

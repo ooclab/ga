@@ -371,6 +371,7 @@ paths:
       summary: 创建权限
       x-roles:
       - admin
+      - create-permission
       parameters:
       - name: body
         in: body

@@ -10,6 +10,7 @@ import (
 	jwt "github.com/dgrijalva/jwt-go"
 )
 
+// UID is a middleware handle authorization token(jwt)
 type UID struct {
 	pubKey []byte
 }

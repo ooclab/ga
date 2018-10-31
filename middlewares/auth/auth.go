@@ -2,10 +2,10 @@ package auth
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/go-openapi/loads"
 	"github.com/ooclab/ga/service"
 )
 
@@ -19,8 +19,6 @@ type Auth struct {
 
 func (auth *Auth) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
 	// do some stuff before
-	fmt.Printf("[Request] %s %s\n", req.Method, req.URL.String())
-	// fmt.Printf("url = %#v\n", auth.spec.url)
 	perm, err := auth.spec.SearchPermission(req)
 	if err != nil {
 		// TODO: response 404
@@ -50,9 +48,8 @@ func (auth *Auth) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.
 }
 
 // NewMiddleware 创建新的 Auth 中间件
-func NewMiddleware(serviceName, path string) *Auth {
-	spec := NewSpec(serviceName, path)
-	spec.Load()
+func NewMiddleware(serviceName string, doc *loads.Document) *Auth {
+	spec := NewSpec(serviceName, doc)
 
 	// app := service.NewApp()
 	// if err := app.CheckAccess(); err != nil {
@@ -62,9 +59,6 @@ func NewMiddleware(serviceName, path string) *Auth {
 
 	// authzClient := authz.NewAuthZ(app)
 	authClient := service.NewAuth()
-	if err := authClient.Connect(); err != nil {
-		logrus.Errorf("auth client connect failed: %s\n", err)
-	}
 
 	return &Auth{
 		spec:       spec,

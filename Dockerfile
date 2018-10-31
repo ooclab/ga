@@ -12,4 +12,4 @@ RUN CGO_ENABLED=0 \
 FROM scratch
 COPY --from=builder /go/src/github.com/ooclab/ga/ga /usr/bin/
 EXPOSE 2999
-CMD ["/usr/bin/ga"]
+CMD ["/usr/bin/ga", "serve"]

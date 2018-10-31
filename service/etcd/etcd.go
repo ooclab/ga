@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"errors"
 	"log"
 	"strings"
 	"time"
@@ -99,5 +100,10 @@ func (s *Session) Get(key string) (string, error) {
 		}
 		return "", err
 	}
-	return string(resp.Kvs[0].Value), nil
+	if len(resp.Kvs) >= 1 {
+		return string(resp.Kvs[0].Value), nil
+	}
+
+	logrus.Errorf("no result found for key (%s): %#v\n", key, resp.Kvs)
+	return "", errors.New("key not exist")
 }

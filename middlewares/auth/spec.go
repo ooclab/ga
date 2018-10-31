@@ -1,14 +1,13 @@
 package auth
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/go-openapi/loads"
@@ -16,12 +15,74 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/validate"
 	"github.com/gorilla/mux"
+	"github.com/ooclab/ga/service/etcd"
 )
+
+// LoadSpec load the service's openapi spec from etcd
+func LoadSpec(serviceName string) (*loads.Document, error) {
+	openapiSpecPath := fmt.Sprintf("/ga/service/%s/openapi/spec", serviceName)
+
+	// get public key
+	session, err := etcd.GetSession()
+	if err != nil {
+		logrus.Errorf("get etcd session failed: %s\n", err)
+		return nil, err
+	}
+
+	specData, err := session.Get(openapiSpecPath)
+	if err != nil {
+		logrus.Errorf("get openapi spec path from etcd failed: %s\n", err)
+		return nil, err
+	}
+	logrus.Debugf("load openapi spec path (%s) success\n", openapiSpecPath)
+
+	doc, err := loads.Analyzed(json.RawMessage([]byte(specData)), "")
+	if err != nil {
+		logrus.Errorf("load spec failed: %v\n", err)
+		return nil, err
+	}
+
+	validate.SetContinueOnErrors(true) // Set global options
+	// Validates spec with default Swagger 2.0 format definitions
+	if err = validate.Spec(doc, strfmt.Default); err != nil {
+		logrus.Errorf("The spec has some validation error: %v\n", err)
+	}
+
+	doc, err = doc.Expanded()
+	if err != nil {
+		logrus.Errorf("failed to expand spec: %s\n", err)
+		return nil, err
+	}
+
+	return doc, err
+}
+
+// LoadSpecFromPath try to load the swagger spec specified by path
+func LoadSpecFromPath(path string) (*loads.Document, error) {
+	doc, err := loads.Spec(path)
+	if err != nil {
+		logrus.Errorf("load spec (%s) failed: %v\n", path, err)
+		return nil, err
+	}
+	validate.SetContinueOnErrors(true) // Set global options
+	// Validates spec with default Swagger 2.0 format definitions
+	if err := validate.Spec(doc, strfmt.Default); err != nil {
+		logrus.Errorf("The spec (%s) has some validation error: %v\n", path, err)
+		return nil, err
+	}
+
+	doc, err = doc.Expanded(&spec.ExpandOptions{RelativeBase: path})
+	if err != nil {
+		logrus.Errorf("failed to expand spec: %s\n", err)
+		os.Exit(1)
+	}
+
+	return doc, nil
+}
 
 // Spec is a object to store info about swagger ui spec
 type Spec struct {
 	serviceName string
-	path        string
 	router      *mux.Router
 	doc         *loads.Document
 
@@ -38,10 +99,10 @@ type Spec struct {
 }
 
 // NewSpec create a new Spec struct
-func NewSpec(serviceName, path string) *Spec {
-	return &Spec{
+func NewSpec(serviceName string, doc *loads.Document) *Spec {
+	spec := &Spec{
 		serviceName:     serviceName,
-		path:            path,
+		doc:             doc,
 		pathReadTimeout: 16, // 16 秒
 
 		routePathMap:      make(map[*mux.Route]string),
@@ -49,6 +110,37 @@ func NewSpec(serviceName, path string) *Spec {
 
 		permissionMap:      make(map[string]*Permission),
 		permissionMapMutex: &sync.Mutex{},
+	}
+	spec.load()
+	return spec
+}
+
+func (s *Spec) load() {
+	// s.router = mux.NewRouter().PathPrefix("/api/auth").Subrouter()
+	s.router = mux.NewRouter()
+
+	for path, v := range s.doc.Spec().Paths.Paths {
+		if v.Get != nil {
+			s.addOperation("GET", path, v)
+		}
+		if v.Post != nil {
+			s.addOperation("POST", path, v)
+		}
+		if v.Put != nil {
+			s.addOperation("PUT", path, v)
+		}
+		if v.Delete != nil {
+			s.addOperation("DELETE", path, v)
+		}
+		if v.Options != nil {
+			s.addOperation("Options", path, v)
+		}
+		if v.Head != nil {
+			s.addOperation("HEAD", path, v)
+		}
+		if v.Patch != nil {
+			s.addOperation("PATCH", path, v)
+		}
 	}
 }
 
@@ -93,81 +185,6 @@ func (s *Spec) GetPermissionMap() map[string]*Permission {
 		m[key] = value
 	}
 	return m
-}
-
-// Load try to load the swagger spec specified by path
-func (s *Spec) Load() *loads.Document {
-	doc, err := s.loadSpecAndWait()
-	if err == nil {
-		validate.SetContinueOnErrors(true)         // Set global options
-		errs := validate.Spec(doc, strfmt.Default) // Validates spec with default Swagger 2.0 format definitions
-
-		if errs == nil {
-			logrus.Debugf("The spec (%s) is valid", s.path)
-		} else {
-			logrus.Errorf("The spec (%s) has some validation errors: %v\n", s.path, errs)
-		}
-	} else {
-		logrus.Errorf("could not load spec (%s): %v\n", s.path, err)
-		os.Exit(1)
-	}
-
-	doc, err = doc.Expanded(&spec.ExpandOptions{RelativeBase: s.path})
-	if err != nil {
-		logrus.Errorf("failed to expand spec: %s\n", err)
-		os.Exit(1)
-	}
-
-	// s.router = mux.NewRouter().PathPrefix("/api/auth").Subrouter()
-	s.router = mux.NewRouter()
-
-	for path, v := range doc.Spec().Paths.Paths {
-		if v.Get != nil {
-			s.addOperation("GET", path, v)
-		}
-		if v.Post != nil {
-			s.addOperation("POST", path, v)
-		}
-		if v.Put != nil {
-			s.addOperation("PUT", path, v)
-		}
-		if v.Delete != nil {
-			s.addOperation("DELETE", path, v)
-		}
-		if v.Options != nil {
-			s.addOperation("Options", path, v)
-		}
-		if v.Head != nil {
-			s.addOperation("HEAD", path, v)
-		}
-		if v.Patch != nil {
-			s.addOperation("PATCH", path, v)
-		}
-	}
-
-	s.doc = doc
-	return s.doc
-}
-
-func (s *Spec) loadSpecAndWait() (doc *loads.Document, err error) {
-	timeout := 0
-	for {
-		doc, err = loads.Spec(s.path)
-		if err != nil {
-			if e, ok := err.(*url.Error); ok {
-				if strings.HasSuffix(e.Err.Error(), "connection refused") ||
-					strings.HasSuffix(e.Err.Error(), "no such host") {
-					if timeout < s.pathReadTimeout {
-						fmt.Printf(".")
-						time.Sleep(1 * time.Second)
-						timeout++
-						continue
-					}
-				}
-			}
-		}
-		return
-	}
 }
 
 // SearchPermission 查询匹配当前请求的权限名
