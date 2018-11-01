@@ -1,3 +1,4 @@
 ga
 .DS_Store
 config.yml
+*.so
