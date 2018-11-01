@@ -27,21 +27,26 @@ var serveCmd = &cobra.Command{
 	Run:   serve.Run,
 	PreRun: func(cmd *cobra.Command, args []string) {
 		viper.SetEnvPrefix("GA") // will be uppercased automatically
-		viper.BindEnv("PORT")
+		viper.BindEnv("PORT_EXTERNAL")
+		viper.BindEnv("PORT_INTERNAL")
 		viper.BindEnv("SERVICE")
-		viper.BindEnv("BACKEND")
+		viper.BindEnv("SERVICE_EXTERNAL")
 		viper.BindEnv("ETCD_ENDPOINTS")
 
-		viper.BindPFlag("port", cmd.Flags().Lookup("port"))
 		viper.BindPFlag("service", cmd.Flags().Lookup("service"))
-		viper.BindPFlag("backend", cmd.Flags().Lookup("backend"))
+		viper.BindPFlag("port_external", cmd.Flags().Lookup("port_external"))
+		viper.BindPFlag("port_internal", cmd.Flags().Lookup("port_internal"))
+		viper.BindPFlag("service_external", cmd.Flags().Lookup("service_external"))
+		viper.BindPFlag("service_internal", cmd.Flags().Lookup("service_internal"))
 		viper.BindPFlag("etcd_endpoints", cmd.Flags().Lookup("etcd_endpoints"))
 	},
 }
 
 func init() {
-	serveCmd.Flags().Int("port", 2999, "port to run ga serve on")
-	serveCmd.Flags().String("etcd_endpoints", "etcd:2379", "the etcd endpoints")
 	serveCmd.Flags().StringP("service", "s", "", "the service name")
-	serveCmd.Flags().StringP("backend", "b", "http://api:3000", "the backend server")
+	serveCmd.Flags().Int("port_external", 2999, "the ga external service port")
+	serveCmd.Flags().Int("port_internal", 2998, "the ga internal service port")
+	serveCmd.Flags().String("service_external", "http://api:3000", "the backend server for external access")
+	serveCmd.Flags().String("service_internal", "http://traefik:10080", "the backend server for internal access")
+	serveCmd.Flags().String("etcd_endpoints", "etcd:2379", "the etcd endpoints")
 }

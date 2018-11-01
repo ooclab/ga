@@ -2,52 +2,59 @@ package serve
 
 import (
 	"context"
-	"fmt"
-	"log"
-	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
-	"os/signal"
-	"strings"
+	"sync"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/codegangsta/negroni"
-	"github.com/go-openapi/loads"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/ooclab/ga/forward"
 	"github.com/ooclab/ga/middlewares/auth"
 	"github.com/ooclab/ga/middlewares/uid"
 )
 
 // Run run cobra subcommand
 func Run(cmd *cobra.Command, args []string) {
-	// check port
-	port := viper.GetInt("port")
-	if port < 80 || port > 50000 {
-		logrus.Errorf("port must >=80 or <= 5000 !")
-		os.Exit(1)
-	}
-	for _, e := range os.Environ() {
-		fmt.Println(e)
-	}
 	// check service name
 	serviceName := viper.GetString("service")
 	if serviceName == "" {
 		logrus.Debugf("all settings: \n%s\n", viper.AllSettings())
 		logrus.Errorf("the service name must not be empty !")
-		os.Exit(2)
+		os.Exit(1)
 	}
 
-	// TODO: check backend is health
-	backendServer := viper.GetString("backend")
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
 
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		runExternalForward(ctx, serviceName)
+		cancel() // TODO: how to cancel gracefully ?
+	}()
+
+	go func() {
+		defer wg.Done()
+		runInternalForward(ctx, serviceName)
+		cancel() // TODO: how to cancel gracefully ?
+	}()
+
+	wg.Wait()
+}
+
+func runExternalForward(ctx context.Context, serviceName string) {
+	logrus.Debugf("try to run external forwarder ...")
 	// check public key
 	pubKey, err := uid.LoadPublicKey()
 	if err != nil {
 		return
 	}
+
+	uidMiddleware := uid.NewMiddleware(pubKey)
 
 	// loads openapi spec
 	doc, err := auth.LoadSpec(serviceName)
@@ -55,92 +62,25 @@ func Run(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	h := getRedirectHandler(pubKey, backendServer, serviceName, doc)
-	runServe(port, h)
+	authMiddleware := auth.NewMiddleware(serviceName, doc)
+
+	middlewares := []negroni.Handler{
+		uidMiddleware,
+		authMiddleware,
+	}
+	port := viper.GetInt("port_external")
+	backend := viper.GetString("service_external")
+	forwarder := forward.NewHTTPForward(ctx, middlewares, port, backend)
+	forwarder.Run()
+	logrus.Debugf("external forwarder quit")
 }
 
-func runServe(port int, h http.Handler) {
-	var srv http.Server
-
-	idleConnsClosed := make(chan struct{})
-	go func() {
-		sigint := make(chan os.Signal, 1)
-		signal.Notify(sigint, os.Interrupt)
-		<-sigint
-
-		// We received an interrupt signal, shut down.
-		if err := srv.Shutdown(context.Background()); err != nil {
-			// Error from closing listeners, or context timeout:
-			log.Printf("HTTP server Shutdown: %v", err)
-		}
-		close(idleConnsClosed)
-	}()
-
-	srv.Addr = fmt.Sprintf(":%d", port)
-	srv.Handler = h
-	logrus.Infof("starting server on %s", srv.Addr)
-	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-		// Error starting or closing listener:
-		log.Printf("HTTP server ListenAndServe: %v", err)
-	}
-
-	<-idleConnsClosed
-}
-
-func getRedirectHandler(pubKey []byte, backendServer string, serviceName string, doc *loads.Document) http.Handler {
-
-	backendURL, err := url.Parse(backendServer)
-	if err != nil {
-		logrus.Errorf("parse %s failed: %s\n", backendServer, err)
-		os.Exit(2)
-	}
-	proxy := NewSingleHostReverseProxy(backendURL)
-
-	n := negroni.New()
-	n.Use(uid.NewMiddleware(pubKey))
-	n.Use(auth.NewMiddleware(serviceName, doc))
-	n.UseHandler(proxy)
-
-	return n
-}
-
-// NewSingleHostReverseProxy returns a new ReverseProxy that routes
-// URLs to the scheme, host, and base path provided in target. If the
-// target's path is "/base" and the incoming request was for "/dir",
-// the target request will be for /base/dir.
-// NewSingleHostReverseProxy does not rewrite the Host header.
-// To rewrite Host headers, use ReverseProxy directly with a custom
-// Director policy.
-func NewSingleHostReverseProxy(target *url.URL) *httputil.ReverseProxy {
-	targetQuery := target.RawQuery
-	director := func(req *http.Request) {
-		req.URL.Scheme = target.Scheme
-		req.URL.Host = target.Host
-		req.URL.Path = singleJoiningSlash(target.Path, req.URL.Path)
-		if targetQuery == "" || req.URL.RawQuery == "" {
-			req.URL.RawQuery = targetQuery + req.URL.RawQuery
-		} else {
-			req.URL.RawQuery = targetQuery + "&" + req.URL.RawQuery
-		}
-		if _, ok := req.Header["User-Agent"]; !ok {
-			// explicitly disable User-Agent so it's not set to default value
-			req.Header.Set("User-Agent", "")
-		}
-
-		// TODO: make a choice
-		req.Host = target.Host
-	}
-	return &httputil.ReverseProxy{Director: director}
-}
-
-func singleJoiningSlash(a, b string) string {
-	aslash := strings.HasSuffix(a, "/")
-	bslash := strings.HasPrefix(b, "/")
-	switch {
-	case aslash && bslash:
-		return a + b[1:]
-	case !aslash && !bslash:
-		return a + "/" + b
-	}
-	return a + b
+func runInternalForward(ctx context.Context, serviceName string) {
+	logrus.Debugf("try to run internal forwarder ...")
+	middlewares := []negroni.Handler{}
+	port := viper.GetInt("port_internal")
+	backend := viper.GetString("service_internal")
+	forwarder := forward.NewHTTPForward(ctx, middlewares, port, backend)
+	forwarder.Run()
+	logrus.Debugf("internal forwarder quit")
 }
