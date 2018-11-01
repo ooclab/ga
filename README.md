@@ -56,9 +56,15 @@ ga 是一个缩写，可以有多种含义：
 
 ### 当前设计
 
-最终，改名为 `ga` ，准备加入其他通用需求，目前，设想架构如下：
+最终，改名为 `ga` ，准备加入其他通用需求。
+
+#### 有 ga 存在的网络架构
 
 ![](./docs/attachments/ga-current-arch.png)
+
+#### `ga serve` 服务介绍
+
+![](./docs/attachments/ga-serve-design.png)
 
 
 ## 目录
