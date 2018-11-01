@@ -1,7 +1,7 @@
 # Idea
 
 
-## 支持可插拔的中间件
+## 支持可插拔的中间件（已完成）
 
 ga 的功能可以精简如下：
 1. 运行多个 http forwarder (以后可以是 grpc forwarder, ...)

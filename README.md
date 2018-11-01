@@ -67,6 +67,16 @@ ga 是一个缩写，可以有多种含义：
 ![](./docs/attachments/ga-serve-design.png)
 
 
+### 进展
+
+#### 已完成
+
+- \[x] 支持启动任意数量的 forwarder ，每个 forwarder 可以自由搭配任意数量的 middlewares
+- \[x] 支持 golang plugin 方式写自定义的 middleware 。 可以查看示例： [hello](https://github.com/ooclab/ga/tree/master/middlewares/hello)
+
+#### TODO
+
+
 ## 目录
 
 - [ideas](./docs/ideas.md)
