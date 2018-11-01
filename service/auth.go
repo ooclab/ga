@@ -1,7 +1,7 @@
 package service
 
 import (
-	"crypto/md5"
+	"encoding/base64"
 	"fmt"
 
 	"github.com/Sirupsen/logrus"
@@ -35,17 +35,17 @@ func (auth *Auth) etcdGetString(key string) (string, error) {
 }
 
 func (auth *Auth) getChecksum(v string) string {
-	return fmt.Sprintf("%x", md5.Sum([]byte(v)))
+	return base64.StdEncoding.EncodeToString([]byte(v))
+	// return fmt.Sprintf("%x", md5.Sum([]byte(v)))
 }
 
 // AddPermission 添加新的权限
+// ga.permissions.<permission_name>.role.<role_name> = <role_name>
 func (auth *Auth) AddPermission(permName string, roles []string) error {
 	var err error
-	var permMD5, roleMD5, key string
-	permMD5 = auth.getChecksum(permName)
+	var key string
 	for _, roleName := range roles {
-		roleMD5 = auth.getChecksum(roleName)
-		key = fmt.Sprintf("/auth/permission/%s/role/%s", permMD5, roleMD5)
+		key = fmt.Sprintf("ga.permissions.%s.role.%s", permName, roleName)
 		if err = auth.etcdSetString(key, roleName); err != nil {
 			return err
 		}
@@ -79,5 +79,5 @@ func (auth *Auth) HasPermission(userID, permName string) error {
 	}
 
 	logrus.Warning("this is uncompleted!")
-	return err
+	return nil
 }

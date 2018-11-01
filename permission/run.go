@@ -26,13 +26,13 @@ func Run(cmd *cobra.Command, args []string) {
 	// viper.SetConfigType("toml")
 	// viper.ReadConfig(bytes.NewBuffer(config))
 
-	serviceName := viper.GetString("permission_service_name")
-	serviceDoc := viper.GetString("permission_service_doc")
+	serviceName := viper.GetString("service_name")
+	openapiPath := viper.GetString("openapi_path")
 
 	logrus.Debugf("service name = %s\n", serviceName)
-	logrus.Debugf("service doc = %s\n", serviceDoc)
+	logrus.Debugf("openapi path = %s\n", openapiPath)
 	// loads openapi spec
-	doc, err := auth.LoadSpecFromPath(serviceDoc)
+	doc, err := auth.LoadSpecFromPath(openapiPath)
 	if err != nil {
 		return
 	}

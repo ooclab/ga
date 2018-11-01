@@ -18,10 +18,11 @@ var permissionCmd = &cobra.Command{
 }
 
 func init() {
-	permissionAddCmd.Flags().StringP("service_name", "n", "", "The service name")
-	permissionAddCmd.Flags().StringP("service_doc", "f", "", "the file path for swaggerui api document")
-	permissionAddCmd.MarkFlagRequired("service_name")
-	permissionAddCmd.MarkFlagRequired("service_doc")
+	permissionAddCmd.Flags().String("etcd_endpoints", "127.0.0.1:2379", "the etcd endpoints")
+	permissionAddCmd.Flags().String("service", "", "the service name")
+	permissionAddCmd.Flags().String("openapi", "", "the file path for openapi document")
+	permissionAddCmd.MarkFlagRequired("service")
+	permissionAddCmd.MarkFlagRequired("openapi")
 }
 
 var permissionAddCmd = &cobra.Command{
@@ -29,7 +30,8 @@ var permissionAddCmd = &cobra.Command{
 	Short: "add permission",
 	Run:   permission.Run,
 	PreRun: func(cmd *cobra.Command, args []string) {
-		viper.BindPFlag("permission_service_name", cmd.Flags().Lookup("service_name"))
-		viper.BindPFlag("permission_service_doc", cmd.Flags().Lookup("service_doc"))
+		viper.BindPFlag("service_name", cmd.Flags().Lookup("service"))
+		viper.BindPFlag("openapi_path", cmd.Flags().Lookup("openapi"))
+		viper.BindPFlag("etcd_endpoints", cmd.Flags().Lookup("etcd_endpoints"))
 	},
 }
