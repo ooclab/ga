@@ -2,7 +2,6 @@ package forward
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -22,18 +21,18 @@ import (
 type HTTPForward struct {
 	ctx         context.Context // for cancel
 	middlewares []negroni.Handler
-	port        int    // which port to listen on
-	backend     string // forward request to this backend
+	listenTo    string   // address to listen on
+	backendAddr *url.URL // forward request to this backend
 	srv         http.Server
 }
 
 // NewHTTPForward create a new http forward
-func NewHTTPForward(ctx context.Context, middlewares []negroni.Handler, port int, backend string) *HTTPForward {
+func NewHTTPForward(ctx context.Context, middlewares []negroni.Handler, listenTo string, backendAddr *url.URL) *HTTPForward {
 	return &HTTPForward{
 		ctx:         ctx,
 		middlewares: middlewares,
-		port:        port,
-		backend:     backend,
+		listenTo:    listenTo,
+		backendAddr: backendAddr,
 		srv:         http.Server{},
 	}
 }
@@ -60,7 +59,7 @@ func (f *HTTPForward) Run() error {
 		close(idleConnsClosed)
 	}()
 
-	f.srv.Addr = fmt.Sprintf(":%d", f.port)
+	f.srv.Addr = f.listenTo
 	f.srv.Handler = handler
 	logrus.Infof("starting server on %s", f.srv.Addr)
 	if err := f.srv.ListenAndServe(); err != http.ErrServerClosed {
@@ -73,12 +72,7 @@ func (f *HTTPForward) Run() error {
 }
 
 func (f *HTTPForward) getRedirectHandler() (http.Handler, error) {
-	backendURL, err := url.Parse(f.backend)
-	if err != nil {
-		logrus.Errorf("parse %s failed: %s\n", f.backend, err)
-		return nil, err
-	}
-	proxy := NewSingleHostReverseProxy(backendURL)
+	proxy := NewSingleHostReverseProxy(f.backendAddr)
 
 	n := negroni.New()
 	for _, mw := range f.middlewares {

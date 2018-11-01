@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/codegangsta/negroni"
 	jwt "github.com/dgrijalva/jwt-go"
 )
 
@@ -34,10 +35,22 @@ func (uid *UID) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.Ha
 }
 
 // NewMiddleware 创建新的UID中间件
-func NewMiddleware(pubKey []byte) *UID {
-	return &UID{
-		pubKey: pubKey,
+func NewMiddleware(cfg map[string]interface{}) (negroni.Handler, error) {
+	var err error
+	uid := &UID{}
+
+	if v, ok := cfg["public_key_etcd"]; ok {
+		uid.pubKey, err = loadPublicKeyFromEtcd(v.(string))
+		if err != nil {
+			return nil, err
+		}
+	} else if v, ok := cfg["public_key"]; ok {
+		uid.pubKey = []byte(v.(string))
 	}
+
+	// TODO: validate public key
+
+	return uid, nil
 }
 
 func getUserID(idToken string, pubKey []byte) (userid string, err error) {

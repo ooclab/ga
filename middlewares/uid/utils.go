@@ -5,10 +5,7 @@ import (
 	"github.com/ooclab/ga/service/etcd"
 )
 
-var publicKeyPath = "/ga/middleware/uid/public_key"
-
-// LoadPublicKey load public key from etcd
-func LoadPublicKey() ([]byte, error) {
+func loadPublicKeyFromEtcd(publicKeyPath string) ([]byte, error) {
 	// get public key
 	session, err := etcd.GetSession()
 	if err != nil {

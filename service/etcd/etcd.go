@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -13,6 +12,7 @@ import (
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 )
 
+var defaultEndpoints = []string{"127.0.0.1:2379"}
 var session *Session
 
 // Session is a etcd client session
@@ -22,7 +22,12 @@ type Session struct {
 }
 
 func newSession() *Session {
-	endpoints := strings.Split(viper.GetString("etcd_endpoints"), ";")
+	endpoints := viper.GetStringSlice("services.etcd.endpoints")
+	if len(endpoints) == 0 {
+		logrus.Warnf("no etcd endpoints found, use default: %s\n", defaultEndpoints)
+		endpoints = defaultEndpoints
+	}
+
 	return &Session{
 		endpoints: endpoints,
 	}

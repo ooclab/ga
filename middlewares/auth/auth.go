@@ -2,9 +2,11 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/codegangsta/negroni"
 	"github.com/go-openapi/loads"
 	"github.com/ooclab/ga/service"
 )
@@ -48,7 +50,32 @@ func (auth *Auth) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.
 }
 
 // NewMiddleware 创建新的 Auth 中间件
-func NewMiddleware(serviceName string, doc *loads.Document) *Auth {
+func NewMiddleware(cfg map[string]interface{}) (negroni.Handler, error) {
+
+	// loads openapi spec
+	var err error
+	var doc *loads.Document
+
+	if v, ok := cfg["openapi_spec_etcd"]; ok {
+		doc, err = loadSpecFromEtcd(v.(string))
+	} else if v, ok := cfg["openapi_spec_path"]; ok {
+		doc, err = loadSpecFromEtcd(v.(string))
+	} else if v, ok := cfg["openapi_spec"]; ok {
+		doc, err = loadSpec([]byte(v.(string)))
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var serviceName string
+	if v, ok := cfg["service_name"]; ok {
+		serviceName = v.(string)
+	}
+	if serviceName == "" {
+		logrus.Errorf("the service name is empty")
+		return nil, errors.New("service name is empty")
+	}
+
 	spec := NewSpec(serviceName, doc)
 
 	// app := service.NewApp()
@@ -65,7 +92,7 @@ func NewMiddleware(serviceName string, doc *loads.Document) *Auth {
 		authClient: authClient,
 		// app:         app,
 		// authzClient: authzClient,
-	}
+	}, nil
 }
 
 func writeJSON(w http.ResponseWriter, statusCode int, data interface{}) {

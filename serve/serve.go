@@ -1,8 +1,13 @@
 package serve
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io/ioutil"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/Sirupsen/logrus"
@@ -15,72 +20,136 @@ import (
 	"github.com/ooclab/ga/middlewares/uid"
 )
 
+var middlewareMap = map[string]func(cfg map[string]interface{}) (negroni.Handler, error){
+	"uid":  uid.NewMiddleware,
+	"auth": auth.NewMiddleware,
+}
+
 // Run run cobra subcommand
 func Run(cmd *cobra.Command, args []string) {
-	// check service name
-	serviceName := viper.GetString("service")
-	if serviceName == "" {
-		logrus.Debugf("all settings: \n%s\n", viper.AllSettings())
-		logrus.Errorf("the service name must not be empty !")
-		os.Exit(1)
+	if viper.GetBool("config-example") {
+		fmt.Printf("%s\n", yamlConfigExample)
+		os.Exit(0)
+	}
+
+	readConfig()
+
+	servers := viper.GetStringMap("servers")
+	if len(servers) == 0 {
+		logrus.Warnf("no servers found, quit now")
+		return
 	}
 
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 
 	var wg sync.WaitGroup
-	wg.Add(2)
 
-	go func() {
-		defer wg.Done()
-		runExternalForward(ctx, serviceName)
-		cancel() // TODO: how to cancel gracefully ?
-	}()
+	for name, _srv := range servers {
+		srv := _srv.(map[string]interface{})
 
-	go func() {
-		defer wg.Done()
-		runInternalForward(ctx, serviceName)
-		cancel() // TODO: how to cancel gracefully ?
-	}()
+		logrus.Debugf("try to run forwarder %s", name)
 
+		// load middlewares
+		var middlewares []negroni.Handler
+		if v, ok := srv["middlewares"]; ok {
+			cfg := v.(map[string]interface{})
+			var err error
+			middlewares, err = loadMiddlewares(cfg)
+			if err != nil {
+				logrus.Errorf("load middlewares failed: %s\n", err)
+				return
+			}
+		}
+
+		backend := srv["backend"].(string)
+		backendAddr, err := url.Parse(backend)
+		if err != nil {
+			logrus.Errorf("parse %s failed: %s\n", backend, err)
+			return
+		}
+
+		listenTo := srv["listen"].(string)
+		forwarder := forward.NewHTTPForward(ctx, middlewares, listenTo, backendAddr)
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			forwarder.Run()
+			cancel() // TODO: how to cancel gracefully ?
+			logrus.Debugf("forwarder %s quit", name)
+		}()
+	}
+
+	// go func() {
+	// 	defer wg.Done()
+	// 	runExternalForward(ctx)
+	// 	cancel() // TODO: how to cancel gracefully ?
+	// }()
+	//
+	// go func() {
+	// 	defer wg.Done()
+	// 	runInternalForward(ctx)
+	// 	cancel() // TODO: how to cancel gracefully ?
+	// }()
+	//
 	wg.Wait()
 }
 
-func runExternalForward(ctx context.Context, serviceName string) {
-	logrus.Debugf("try to run external forwarder ...")
-	// check public key
-	pubKey, err := uid.LoadPublicKey()
-	if err != nil {
+func readConfig() {
+
+	// 1. try read config from command lie
+	configPath := viper.GetString("config")
+	if configPath != "" {
+		logrus.Debugf("load config from %s\n", configPath)
+		data, err := ioutil.ReadFile(configPath)
+		if err != nil {
+			logrus.Errorf("read config (%s) failed: %s\n", configPath, err)
+			os.Exit(2)
+		}
+		if strings.HasSuffix(configPath, "yml") || strings.HasSuffix(configPath, "yaml") {
+			viper.SetConfigType("yaml") // or viper.SetConfigType("YAML")
+		} else if strings.HasSuffix(configPath, "json") {
+			viper.SetConfigType("json")
+		} else if strings.HasSuffix(configPath, "toml") {
+			viper.SetConfigType("toml")
+		} else {
+			logrus.Errorf("unsupported config file type, just [yaml, json, toml]")
+			os.Exit(2)
+		}
+		if err := viper.ReadConfig(bytes.NewBuffer(data)); err != nil {
+			logrus.Errorf("load failed: %s\n", err)
+		}
 		return
 	}
 
-	uidMiddleware := uid.NewMiddleware(pubKey)
+	// 2. try read config from default paths
 
-	// loads openapi spec
-	doc, err := auth.LoadSpec(serviceName)
-	if err != nil {
-		return
+	viper.SetConfigName("config")    // name of config file (without extension)
+	viper.AddConfigPath("/etc/ga/")  // path to look for the config file in
+	viper.AddConfigPath("$HOME/.ga") // call multiple times to add many search paths
+	viper.AddConfigPath(".")         // optionally look for config in the working directory
+	err := viper.ReadInConfig()      // Find and read the config file
+	if err != nil {                  // Handle errors reading the config file
+		logrus.Errorf("read config file failed: %s \n", err)
+		os.Exit(2)
 	}
-
-	authMiddleware := auth.NewMiddleware(serviceName, doc)
-
-	middlewares := []negroni.Handler{
-		uidMiddleware,
-		authMiddleware,
-	}
-	port := viper.GetInt("port_external")
-	backend := viper.GetString("service_external")
-	forwarder := forward.NewHTTPForward(ctx, middlewares, port, backend)
-	forwarder.Run()
-	logrus.Debugf("external forwarder quit")
 }
 
-func runInternalForward(ctx context.Context, serviceName string) {
-	logrus.Debugf("try to run internal forwarder ...")
-	middlewares := []negroni.Handler{}
-	port := viper.GetInt("port_internal")
-	backend := viper.GetString("service_internal")
-	forwarder := forward.NewHTTPForward(ctx, middlewares, port, backend)
-	forwarder.Run()
-	logrus.Debugf("internal forwarder quit")
+func loadMiddlewares(cfgs map[string]interface{}) ([]negroni.Handler, error) {
+	var middlewares []negroni.Handler
+	for name, _cfg := range cfgs {
+		cfg := _cfg.(map[string]interface{})
+		if fc, ok := middlewareMap[name]; ok {
+			mw, err := fc(cfg)
+			if err != nil {
+				logrus.Errorf("load %s middleware failed: %s\n", name, err)
+				return nil, err
+			}
+			middlewares = append(middlewares, mw)
+		} else {
+			logrus.Warnf("unknown middleware %s, pass\n", name)
+		}
+	}
+	return middlewares, nil
 }

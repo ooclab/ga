@@ -18,25 +18,8 @@ import (
 	"github.com/ooclab/ga/service/etcd"
 )
 
-// LoadSpec load the service's openapi spec from etcd
-func LoadSpec(serviceName string) (*loads.Document, error) {
-	openapiSpecPath := fmt.Sprintf("/ga/service/%s/openapi/spec", serviceName)
-
-	// get public key
-	session, err := etcd.GetSession()
-	if err != nil {
-		logrus.Errorf("get etcd session failed: %s\n", err)
-		return nil, err
-	}
-
-	specData, err := session.Get(openapiSpecPath)
-	if err != nil {
-		logrus.Errorf("get openapi spec path from etcd failed: %s\n", err)
-		return nil, err
-	}
-	logrus.Debugf("load openapi spec path (%s) success\n", openapiSpecPath)
-
-	doc, err := loads.Analyzed(json.RawMessage([]byte(specData)), "")
+func loadSpec(content []byte) (*loads.Document, error) {
+	doc, err := loads.Analyzed(json.RawMessage([]byte(content)), "")
 	if err != nil {
 		logrus.Errorf("load spec failed: %v\n", err)
 		return nil, err
@@ -57,6 +40,25 @@ func LoadSpec(serviceName string) (*loads.Document, error) {
 	return doc, err
 }
 
+func loadSpecFromEtcd(openapiSpecPath string) (*loads.Document, error) {
+
+	// get public key
+	session, err := etcd.GetSession()
+	if err != nil {
+		logrus.Errorf("get etcd session failed: %s\n", err)
+		return nil, err
+	}
+
+	specData, err := session.Get(openapiSpecPath)
+	if err != nil {
+		logrus.Errorf("get openapi spec path from etcd failed: %s\n", err)
+		return nil, err
+	}
+	logrus.Debugf("load openapi spec path (%s) success\n", openapiSpecPath)
+
+	return loadSpec([]byte(specData))
+}
+
 // LoadSpecFromPath try to load the swagger spec specified by path
 func LoadSpecFromPath(path string) (*loads.Document, error) {
 	doc, err := loads.Spec(path)
@@ -71,6 +73,7 @@ func LoadSpecFromPath(path string) (*loads.Document, error) {
 		return nil, err
 	}
 
+	// expanded
 	doc, err = doc.Expanded(&spec.ExpandOptions{RelativeBase: path})
 	if err != nil {
 		logrus.Errorf("failed to expand spec: %s\n", err)
