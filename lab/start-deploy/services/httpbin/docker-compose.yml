@@ -1,0 +1,21 @@
+version: "3"
+services:
+
+    ga:
+        image: ga:v1
+        volumes:
+            - "./config.yml:/etc/ga/config.yml"
+        environment:
+            GA_DEBUG: "true"
+        networks:
+            - default
+            - traefik
+        labels:
+            traefik.backend: httpbin
+            traefik.frontend.rule: PathPrefixStrip:/httpbin
+            traefik.docker.network: ga-deploy-traefik
+
+networks:
+    traefik:
+        external:
+          name: ga-deploy-traefik
