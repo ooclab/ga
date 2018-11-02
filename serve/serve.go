@@ -14,17 +14,15 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/codegangsta/negroni"
+	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/ooclab/ga/forward"
-	"github.com/ooclab/ga/middlewares/auth"
-	"github.com/ooclab/ga/middlewares/uid"
 )
 
 var middlewareMap = map[string]func(cfg map[string]interface{}) (negroni.Handler, error){
-	"uid":  uid.NewMiddleware,
-	"auth": auth.NewMiddleware,
+	"logger": func(map[string]interface{}) (negroni.Handler, error) { return negroni.NewLogger(), nil },
 }
 
 // Run run cobra subcommand
@@ -177,10 +175,12 @@ func loadPlugin(cfg map[string]interface{}) (negroni.Handler, error) {
 	var p *plugin.Plugin
 	var path string
 
+	hd, _ := homedir.Expand(fmt.Sprintf("~/.ga/middlewares/%s.so", name))
+
 	for _, path = range []string{
-		fmt.Sprintf("middlewares/%s/%s.so", name, name),
-		fmt.Sprintf("/etc/ga/middlewares/%s/%s.so", name, name),
-		fmt.Sprintf("~/.ga/middlewares/%s/%s.so", name, name),
+		fmt.Sprintf("middlewares/%s.so", name),
+		fmt.Sprintf("/etc/ga/middlewares/%s.so", name),
+		hd,
 	} {
 		p, err = plugin.Open(path)
 		if err == nil {
