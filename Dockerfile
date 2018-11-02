@@ -5,7 +5,7 @@ COPY . .
 RUN make
 
 
-FROM golang:1.11
+FROM debian:9.5
 RUN mkdir -pv /etc/ga/middlewares/
 COPY --from=builder /go/src/github.com/ooclab/ga/ga /usr/bin/ga
 COPY --from=builder /go/src/github.com/ooclab/ga/*.so /etc/ga/middlewares/

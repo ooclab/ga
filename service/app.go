@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -59,6 +60,12 @@ func (app *App) login() error {
 		logrus.Errorf("get app access_token failed: %s\n", err)
 		return err
 	}
+	if status, ok := resp.Body["status"]; ok {
+		if status.(string) != "success" {
+			return fmt.Errorf("app login with error %s", status)
+		}
+	}
+
 	data, ok := resp.Body["data"].(map[string]interface{})
 	if !ok {
 		logrus.Errorf("unknown data in body: %v\n", resp.Body)
