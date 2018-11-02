@@ -20,7 +20,7 @@ Current Support:
 Current Middlewares:
 
 - \[x] [hello](./middlewares/hello) : for example
-- \[x] [jwt](./middlewares/jwt) : for decode JWT , and set `X-User-Id` header by user id
+- \[x] [jwt](./middlewares/jwt) : decode JWT (from `Authorization` in HTTP Request Header), and set `X-User-Id` header by user id
 - \[x] [addauth](./middlewares/addauth) : manage `access_token` and `refresh_token` , add JWT with `Authorization` in HTTP Request Header auto
 - \[ ] [openapi](./middlewares/openapi) : authorize permissions and validate request args with OpenAPI 2.0 Spec Document of the backend service
 
