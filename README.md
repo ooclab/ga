@@ -1,4 +1,4 @@
-# **G** uardian **A** ngel
+# Guardian Angel
 
 A lightweight middleware for service-oriented architecture
 
