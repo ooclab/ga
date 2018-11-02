@@ -13,6 +13,11 @@ We don't want to argument the term, we just want to do right job.
 
 ![](./docs/attachments/ga-current-arch.png)
 
+Current Support:
+
+- \[x] custom your middleware with golang plugin ( [third-party-middleware](https://github.com/urfave/negroni#third-party-middleware) )
+
+
 ## 简介
 
 ga 是一个缩写，可以有多种含义：
