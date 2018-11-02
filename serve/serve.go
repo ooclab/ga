@@ -3,6 +3,7 @@ package serve
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -54,11 +55,15 @@ func Run(cmd *cobra.Command, args []string) {
 		// load middlewares
 		var middlewares []negroni.Handler
 		if v, ok := srv["middlewares"]; ok {
-			var cfg map[string]interface{}
-			if v == nil {
+			var cfg []interface{}
+			switch v.(type) {
+			case nil:
 				logrus.Debugf("no middlewares found for %s, continue", name)
-			} else {
-				cfg = v.(map[string]interface{})
+			case []interface{}:
+				cfg = v.([]interface{})
+			default:
+				logrus.Errorf("unsupport middlewares config type: %T\n", v)
+				os.Exit(2)
 			}
 			var err error
 			middlewares, err = loadMiddlewares(cfg)
@@ -66,6 +71,7 @@ func Run(cmd *cobra.Command, args []string) {
 				logrus.Errorf("load middlewares failed: %s\n", err)
 				return
 			}
+			logrus.Debugf("load middlewares success for %s\n", name)
 		}
 
 		backend := srv["backend"].(string)
@@ -130,22 +136,30 @@ func readConfig() {
 	}
 }
 
-func loadMiddlewares(cfgs map[string]interface{}) ([]negroni.Handler, error) {
+func loadMiddlewares(cfgs []interface{}) ([]negroni.Handler, error) {
 	var middlewares []negroni.Handler
-	for name, _cfg := range cfgs {
-		var cfg map[string]interface{}
-		if _cfg == nil {
-			logrus.Debugf("no middlewares found for %s, continue", name)
-		} else {
-			cfg = _cfg.(map[string]interface{})
+	for _, v := range cfgs {
+		cfg := map[string]interface{}{}
+		switch v.(type) {
+		case map[string]interface{}:
+			cfg = v.(map[string]interface{})
+		case map[interface{}]interface{}:
+			for key, value := range v.(map[interface{}]interface{}) {
+				cfg[key.(string)] = value
+			}
+		default:
+			logrus.Errorf("unsupport middleware config type: %T\n", v)
+			os.Exit(3)
 		}
+
+		name := cfg["name"].(string)
 		var err error
 		var mw negroni.Handler
 		if fc, ok := middlewareMap[name]; ok {
 			mw, err = fc(cfg)
 		} else {
 			logrus.Debugf("try load middleware (%s) as plugin\n", name)
-			mw, err = loadPlugin(name, cfg)
+			mw, err = loadPlugin(cfg)
 		}
 		if err != nil {
 			logrus.Errorf("load %s middleware failed: %s\n", name, err)
@@ -156,13 +170,29 @@ func loadMiddlewares(cfgs map[string]interface{}) ([]negroni.Handler, error) {
 	return middlewares, nil
 }
 
-func loadPlugin(name string, cfg map[string]interface{}) (negroni.Handler, error) {
-	path := fmt.Sprintf("middlewares/%s/%s.so", name, name)
-	p, err := plugin.Open(path)
-	if err != nil {
-		logrus.Errorf("load plugin (%s) failed: %s", path, err)
-		return nil, err
+func loadPlugin(cfg map[string]interface{}) (negroni.Handler, error) {
+	name := cfg["name"].(string)
+
+	var err error
+	var p *plugin.Plugin
+	var path string
+
+	for _, path = range []string{
+		fmt.Sprintf("middlewares/%s/%s.so", name, name),
+		fmt.Sprintf("/etc/ga/middlewares/%s/%s.so", name, name),
+		fmt.Sprintf("~/.ga/middlewares/%s/%s.so", name, name),
+	} {
+		p, err = plugin.Open(path)
+		if err == nil {
+			break
+		}
+		logrus.Debugf("load plugin (%s) failed: %s", path, err)
 	}
+	if p == nil {
+		logrus.Errorf("can not load middleware plugin %s\n", name)
+		return nil, errors.New("can not load plugin")
+	}
+
 	f, err := p.Lookup("NewMiddleware")
 	if err != nil {
 		logrus.Errorf("lookup NewMiddleware func from plugin (%s) failed: %s", path, err)
