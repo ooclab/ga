@@ -1,6 +1,6 @@
 # Guardian Angel
 
-A lightweight middleware for service-oriented architecture.
+**G**uardian**A**ngel a lightweight middleware for service-oriented architecture.
 
 What is the `service-oriented` here ?
 1. `big services` : export a http(s) api
@@ -8,7 +8,8 @@ What is the `service-oriented` here ?
    - microservices / nanoservices
    - serverless / FaaS
 
-we don't want to argument the term, we just want to do right job.
+We don't want to argument the term, we just want to do right job.
+:-)
 
 ![](./docs/attachments/ga-current-arch.png)
 
