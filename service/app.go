@@ -22,16 +22,16 @@ type App struct {
 
 	client *Client
 
-	accessToken  string
+	AccessToken  string
 	refreshToken string
 	expiresIn    time.Time
 }
 
 // NewApp 创建 App 结构
 func NewApp() *App {
-	baseURL := viper.GetString("service.authn.baseurl")
-	appID := viper.GetString("service.authn.app_id")
-	appSecret := viper.GetString("service.authn.app_secret")
+	baseURL := viper.GetString("services.authn.baseurl")
+	appID := viper.GetString("services.authn.app_id")
+	appSecret := viper.GetString("services.authn.app_secret")
 
 	logrus.Debugf("authn baseurl: %s\n", baseURL)
 
@@ -71,7 +71,7 @@ func (app *App) login() error {
 		return err
 	}
 
-	app.accessToken = data["access_token"].(string)
+	app.AccessToken = data["access_token"].(string)
 	app.refreshToken = data["refresh_token"].(string)
 	app.expiresIn = expiresIn
 	return nil
@@ -100,13 +100,13 @@ func (app *App) doRefreshToken() error {
 		return err
 	}
 
-	app.accessToken = data["access_token"].(string)
+	app.AccessToken = data["access_token"].(string)
 	app.refreshToken = data["refresh_token"].(string)
 	return nil
 }
 
 func (app *App) beforeRequest() error {
-	if app.accessToken == "" {
+	if app.AccessToken == "" {
 		logrus.Debug("app: first time to login")
 		return app.login()
 	}
@@ -130,8 +130,8 @@ func (app *App) sendRequest(
 	body interface{}) (*Response, error) {
 	// Set Access Token
 	headers := map[string]string{}
-	if app.accessToken != "" {
-		headers["Authorization"] = "Bearer " + app.accessToken
+	if app.AccessToken != "" {
+		headers["Authorization"] = "Bearer " + app.AccessToken
 	}
 	return app.client.SendRequest(method, url, queryParams, headers, body)
 }
