@@ -20,9 +20,18 @@
 
 1. [authz](https://github.com/ooclab/ga.authz) 是我们设计的一种权限管理服务，实际环境中，可以修改代码，实现自定义的权限管理。
 
+
 ## 功能
 
 - \[x] validate service's openapi 2.0 spec document
 - \[x] match http request route to permission name
 - \[x] Dose the current X-User-Id has this permission ( current request entry ) , use etcd
 - \[ ] validate request args
+
+
+## 参考
+
+- [openapis.org](https://www.openapis.org/)
+- [swagger.io](https://swagger.io/)
+- [OpenAPI-Specification](https://github.com/OAI/OpenAPI-Specification)
+- [go-openapi](https://github.com/go-openapi)
