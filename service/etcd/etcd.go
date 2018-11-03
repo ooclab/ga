@@ -12,6 +12,9 @@ import (
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 )
 
+// ErrKeyNotExist 表示该 etcd key 不存在（查无结果）
+var ErrKeyNotExist = errors.New("key not exist")
+
 var defaultEndpoints = []string{"127.0.0.1:2379"}
 var session *Session
 
@@ -110,5 +113,5 @@ func (s *Session) Get(key string) (string, error) {
 	}
 
 	logrus.Errorf("no result found for key (%s): %#v\n", key, resp.Kvs)
-	return "", errors.New("key not exist")
+	return "", ErrKeyNotExist
 }

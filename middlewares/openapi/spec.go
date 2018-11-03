@@ -253,41 +253,6 @@ func NewPermssion(gaspec *Spec, method string, path string, spi *spec.PathItem) 
 	}
 }
 
-// Roles 返回该权限需要的角色
-func (p *Permission) Roles() []string {
-	if p.roles != nil {
-		return p.roles
-	}
-
-	p.roles = []string{}
-
-	// 1. 检查自定义的权限
-	extensions := p.op.VendorExtensible.Extensions
-	if extensions != nil {
-		for extName, extValue := range extensions {
-			if extName == "x-roles" {
-				for _, roleName := range extValue.([]interface{}) {
-					p.roles = append(p.roles, roleName.(string))
-				}
-				break
-			}
-		}
-	}
-	if len(p.roles) != 0 {
-		return p.roles
-	}
-
-	// 2. 如果没有自定义权限再判断 Authorization 判断
-	if needAuth(p.spi.PathItemProps.Parameters) || needAuth(p.op.OperationProps.Parameters) {
-		p.roles = append(p.roles, "authenticated")
-		return p.roles
-	}
-
-	// 3. 如果其他权限都没有，表明只需要匿名权限
-	p.roles = append(p.roles, "anonymous")
-	return p.roles
-}
-
 // Summary 返回权限描述
 func (p *Permission) Summary() string {
 	desc := p.op.Summary
@@ -304,33 +269,4 @@ func (p *Permission) String() string {
 // Code return the code of permission
 func (p *Permission) Code() string {
 	return fmt.Sprintf("%s:%s:%s", p.Spec.serviceName, p.method, p.path)
-}
-
-// NeedPermission 是否需要权限
-func (p *Permission) NeedPermission() bool {
-	for _, roleName := range p.Roles() {
-		if roleName == "anonymous" {
-			return false
-		}
-	}
-	return true
-}
-
-// JustAuthenticated 检测是否仅仅需要登录权限
-func (p *Permission) JustAuthenticated() bool {
-	for _, roleName := range p.Roles() {
-		if roleName == "authenticated" {
-			return true
-		}
-	}
-	return false
-}
-
-func needAuth(parameters []spec.Parameter) bool {
-	for _, parameter := range parameters {
-		if parameter.ParamProps.Name == "Authorization" {
-			return true
-		}
-	}
-	return false
 }

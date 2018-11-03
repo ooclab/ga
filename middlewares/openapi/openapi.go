@@ -9,7 +9,6 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/codegangsta/negroni"
 	"github.com/mitchellh/mapstructure"
-	"github.com/ooclab/ga/service"
 )
 
 var log *logrus.Entry
@@ -32,11 +31,9 @@ func (c *config) init() error {
 }
 
 type openapiMiddleware struct {
-	spec       *Spec
-	authClient *service.Auth
-	cfg        config
-	// app         *service.App
-	// authzClient *authz.AuthZ
+	cfg  config
+	spec *Spec
+	auth *Auth
 }
 
 func (h *openapiMiddleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
@@ -44,30 +41,18 @@ func (h *openapiMiddleware) ServeHTTP(w http.ResponseWriter, req *http.Request, 
 	perm, err := h.spec.SearchPermission(req)
 	if err != nil {
 		// TODO: response 404
-		logrus.Errorf("match permission failed: %s\n", err)
+		log.Errorf("match permission failed: %s\n", err)
 		writeJSON(w, 403, map[string]string{"status": err.Error()})
 		return
 	}
-	logrus.Debugf("match permission: %s, need roles: %s\n", perm.Name, perm.Roles())
+	log.Debugf("match permission: %s\n", perm.Name)
 
-	if perm.NeedPermission() {
-		userID := req.Header.Get("X-User-Id")
-		if userID == "" {
-			writeJSON(w, 403, map[string]string{"status": "need-authorization"})
-			return
-		}
-
-		if !perm.JustAuthenticated() {
-			log.Warnf("not completed!")
-			// if err := auth.authClient.HasPermission(userID, perm.Name); err != nil {
-			// 	logrus.Errorf("check permission failed: %s\n", err)
-			// 	writeJSON(w, 403, map[string]string{"status": err.Error()})
-			// 	return
-			// }
-		}
+	if err := h.auth.HasPermission(req.Header.Get("X-User-Id"), perm.Name); err != nil {
+		writeJSON(w, 403, map[string]string{"status": err.Error()})
+		return
 	}
+
 	next(w, req)
-	// do some stuff after
 }
 
 // NewMiddleware 创建新的 Auth 中间件
@@ -80,13 +65,10 @@ func NewMiddleware(_cfg map[string]interface{}) (negroni.Handler, error) {
 		"middleware": "openapi",
 	})
 
-	log.Printf("_cfg = %#v\n", _cfg)
-
 	if err := mapstructure.Decode(_cfg, &h.cfg); err != nil {
 		log.Errorf("load config failed: %s", err)
 		return nil, errors.New("decode config failed")
 	}
-	log.Printf("h.cfg = %#v\n", h.cfg)
 
 	if err := h.cfg.init(); err != nil {
 		return nil, err
@@ -100,14 +82,11 @@ func NewMiddleware(_cfg map[string]interface{}) (negroni.Handler, error) {
 
 	h.spec = NewSpec(h.cfg.ServiceName, doc)
 
-	// app := service.NewApp()
-	// if err := app.CheckAccess(); err != nil {
-	// 	logrus.Errorf("create app failed: %s\n", err)
-	// 	os.Exit(1)
-	// }
-
-	// authzClient := authz.NewAuthZ(app)
-	// authClient := service.NewAuth()
+	h.auth, err = NewAuth()
+	if err != nil {
+		log.Errorf("create auth failed: %s\n", err)
+		return nil, err
+	}
 
 	return h, nil
 }
