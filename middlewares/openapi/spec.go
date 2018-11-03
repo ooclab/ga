@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -14,9 +16,17 @@ import (
 	"github.com/go-openapi/spec"
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/validate"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+
 	"github.com/ooclab/ga/service/etcd"
 )
+
+type vError struct {
+	Name    string
+	Code    string
+	Message string
+}
 
 func loadSpec(content []byte) (*loads.Document, error) {
 	doc, err := loads.Analyzed(json.RawMessage([]byte(content)), "")
@@ -197,6 +207,7 @@ func (s *Spec) SearchPermission(req *http.Request) (*Permission, error) {
 		path := s.getRoutePath(match.Route)
 		permName := genPermissionName(s.serviceName, req.Method, path)
 		perm := s.getPermission(permName)
+		perm.routeMatch = &match
 		return perm, nil
 	}
 	log.Debugf("match = %#v\n", match)
@@ -211,13 +222,14 @@ func getPermissionID(route *mux.Route) string {
 
 // Permission store the properites needed by permission
 type Permission struct {
-	Spec   *Spec
-	Name   string
-	method string
-	path   string
-	spi    *spec.PathItem
-	op     *spec.Operation
-	roles  []string
+	Spec       *Spec
+	Name       string
+	method     string
+	path       string
+	spi        *spec.PathItem
+	op         *spec.Operation
+	routeMatch *mux.RouteMatch // hold the path value
+	roles      []string
 }
 
 func genPermissionName(serviceName, method, path string) string {
@@ -269,4 +281,243 @@ func (p *Permission) String() string {
 // Code return the code of permission
 func (p *Permission) Code() string {
 	return fmt.Sprintf("%s:%s:%s", p.Spec.serviceName, p.method, p.path)
+}
+
+// validateRequest validate the current request args
+func (p *Permission) validateRequest(req *http.Request) []*vError {
+	var verr *vError
+	var errs = []*vError{}
+
+	parameters := []spec.Parameter{}
+	parameters = append(parameters, p.spi.Parameters...)
+	parameters = append(parameters, p.op.Parameters...)
+
+	log.Warnf("in developing ...")
+	allowedQueryParams := []string{}
+
+	for _, parameter := range parameters {
+		name := parameter.Name
+
+		// Authorization
+		if name == "Authorization" {
+			if req.Header.Get("X-User-Id") == "" && parameter.Required {
+				errs = append(errs, &vError{
+					Name:    p.Name,
+					Code:    "need-x-user-id",
+					Message: fmt.Sprint("the http request header X-User-Id is needed"),
+				})
+			}
+			continue
+		}
+
+		// fmt.Printf("    name: %s, in: %s, type: %s, type_name: %s, format: %s, op: %#v\n", parameter.Name, parameter.In, parameter.Type, parameter.TypeName(), parameter.Format, parameter)
+
+		switch parameter.In {
+		case "query":
+			allowedQueryParams = append(allowedQueryParams, parameter.Name)
+			verr = p.validateQeuryParameter(&parameter, req.URL.Query())
+		case "path":
+			verr = p.validatePathParameter(&parameter, req.URL.Query())
+		case "header":
+			verr = p.validateHeaderParameter(&parameter, req.URL.Query())
+		default:
+			verr = &vError{
+				Name:    name,
+				Code:    "unknown-parameter-in",
+				Message: fmt.Sprintf("unknown parameter in: %s\n", parameter.In),
+			}
+		}
+		if verr != nil {
+			errs = append(errs, verr)
+		}
+	}
+	// log.Debugf("%s:%s allowedQueryParams = %v\n", p.method, p.path, allowedQueryParams)
+	if len(errs) == 0 {
+		return nil
+	}
+	return errs
+}
+
+func (p *Permission) validateQeuryParameter(parameter *spec.Parameter, q url.Values) *vError {
+	_, ok := q[parameter.Name]
+	if !ok {
+		if parameter.Required {
+			return &vError{
+				Name:    p.Name,
+				Code:    "required",
+				Message: fmt.Sprintf("query parameter (%s) is required", parameter.Name),
+			}
+		}
+		return nil
+	}
+
+	v := q.Get(p.Name)
+	// fmt.Printf("p.Name = %s, p.Type = %s, p.Enum = %#v, v = %s\n", parameter.Name, parameter.Type, parameter.Enum, v)
+
+	switch parameter.Type {
+	case "integer":
+		return validateInteger(parameter, v)
+	case "float":
+		return validateFloat(parameter, v)
+	case "string":
+		return validateString(parameter, v)
+	}
+
+	return nil
+}
+
+func (p *Permission) validatePathParameter(parameter *spec.Parameter, q url.Values) *vError {
+	v, ok := p.routeMatch.Vars[parameter.Name]
+	if !ok {
+		// all path parameter is required
+		return &vError{
+			Name:    parameter.Name,
+			Code:    "required",
+			Message: fmt.Sprintf("path parameter (%s) is required", parameter.Name),
+		}
+	}
+
+	switch parameter.Type {
+	case "integer":
+		return validateInteger(parameter, v)
+	case "float":
+		return validateFloat(parameter, v)
+	case "string":
+		return validateString(parameter, v)
+	}
+
+	return nil
+}
+
+func (p *Permission) validateHeaderParameter(parameter *spec.Parameter, q url.Values) *vError {
+	log.Warnf("uncompleted header parameter validate ...")
+	return nil
+}
+
+func validateInteger(p *spec.Parameter, v string) *vError {
+	iv, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return &vError{
+			Name:    p.Name,
+			Code:    "need-integer",
+			Message: fmt.Sprintf("value (%s) is not a integer: %s\n", v, err),
+		}
+	}
+
+	if p.Maximum != nil {
+		maximum := int64(*p.Maximum)
+		if maximum < iv {
+			return &vError{
+				Name:    p.Name,
+				Code:    "greater-than-maximum",
+				Message: fmt.Sprintf("value (%s) is greater than %d", v, maximum),
+			}
+		}
+	}
+
+	if p.Minimum != nil {
+		minimum := int64(*p.Minimum)
+		if minimum > iv {
+			return &vError{
+				Name:    p.Name,
+				Code:    "less-than-minimum",
+				Message: fmt.Sprintf("value (%s) is less than %d", v, minimum),
+			}
+		}
+	}
+
+	return nil
+}
+
+func validateFloat(p *spec.Parameter, v string) *vError {
+	iv, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return &vError{
+			Name:    p.Name,
+			Code:    "need-number",
+			Message: fmt.Sprintf("value (%s) is not a number: %s\n", v, err),
+		}
+	}
+
+	if p.Maximum != nil && *p.Maximum < iv {
+		return &vError{
+			Name:    p.Name,
+			Code:    "greater-than-maximum",
+			Message: fmt.Sprintf("value (%s) is greater than %f", v, *p.Maximum),
+		}
+	}
+
+	if p.Minimum != nil && *p.Minimum > iv {
+		return &vError{
+			Name:    p.Name,
+			Code:    "less-than-minimum",
+			Message: fmt.Sprintf("value (%s) is less than %f", v, *p.Minimum),
+		}
+	}
+
+	return nil
+}
+
+func validateString(p *spec.Parameter, v string) *vError {
+
+	// validate
+
+	// validate maxlenght
+	if p.MaxLength != nil && *p.MaxLength < int64(len(v)) {
+		return &vError{
+			Name:    p.Name,
+			Code:    "greater-than-maxlength",
+			Message: fmt.Sprintf("value (%s) is greater than %d", v, p.MaxLength),
+		}
+	}
+
+	// validate minlength
+	if p.MinLength != nil && *p.MinLength > int64(len(v)) {
+		return &vError{
+			Name:    p.Name,
+			Code:    "less-than-minlength",
+			Message: fmt.Sprintf("value (%s) is less than %d", v, p.MinLength),
+		}
+	}
+
+	// validate enum
+	if len(p.Enum) > 0 {
+		for _, enum := range p.Enum {
+			if enum.(string) == v {
+				return nil
+			}
+		}
+		return &vError{
+			Name:    p.Name,
+			Code:    "not-in-enum",
+			Message: fmt.Sprintf("value (%s) is not in enum %v", v, p.Enum),
+		}
+	}
+
+	// validate format
+	if p.Format != "" {
+		switch p.Format {
+		case "uuid":
+			if !isValidUUID(v) {
+				return &vError{
+					Name:    p.Name,
+					Code:    "invalid-uuid",
+					Message: fmt.Sprintf("value (%s) is not a valid uuid", v),
+				}
+			}
+		default:
+			return &vError{
+				Name:    p.Name,
+				Code:    "unknown-format",
+				Message: fmt.Sprintf("value (%s) : format (%s) is unsupported now", v, p.Format),
+			}
+		}
+	}
+
+	return nil
+}
+
+func isValidUUID(u string) bool {
+	_, err := uuid.Parse(u)
+	return err == nil
 }

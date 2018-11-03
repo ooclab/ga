@@ -37,7 +37,7 @@ type openapiMiddleware struct {
 }
 
 func (h *openapiMiddleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
-	// do some stuff before
+	// find the permission name
 	perm, err := h.spec.SearchPermission(req)
 	if err != nil {
 		// TODO: response 404
@@ -47,8 +47,15 @@ func (h *openapiMiddleware) ServeHTTP(w http.ResponseWriter, req *http.Request, 
 	}
 	log.Debugf("match permission: %s\n", perm.Name)
 
+	// does current user has permission ?
 	if err := h.auth.HasPermission(req.Header.Get("X-User-Id"), perm.Name); err != nil {
 		writeJSON(w, 403, map[string]string{"status": err.Error()})
+		return
+	}
+
+	// does current request has right args ?
+	if errs := perm.validateRequest(req); errs != nil {
+		writeJSON(w, 403, map[string]interface{}{"status": "request-args-validate-failed", "errors": errs})
 		return
 	}
 
