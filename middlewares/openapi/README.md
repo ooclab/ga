@@ -29,6 +29,56 @@
 - \[ ] validate request args
 
 
+## 使用
+
+### 禁止未声明的参数
+
+在 json schema 里设置 `additionalProperties: false` 即可，示例：
+
+```yaml
+post:
+  tags:
+  - permission
+  summary: 创建权限
+  x-roles:
+  - admin
+  - create-permission
+  parameters:
+  - name: body
+    in: body
+    schema:
+      type: object
+      required:
+      - name
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: 名称（必须全局唯一）
+          minLength: 2
+          maxLength: 128
+        summary:
+          type: string
+          description: 描述
+          maxLength: 256
+        description:
+          type: string
+          description: 详细描述
+  responses:
+    "200":
+      description: OK
+      schema:
+        $ref: '#/definitions/ObjectCreateSuccess'
+    default:
+      description: |
+        返回错误信息
+        error 值及含义：
+        - `name-exist` : 名字已经存在
+      schema:
+        $ref: '#/definitions/DefaultErrorResponse'
+```
+
+
 ## 参考
 
 - [openapis.org](https://www.openapis.org/)

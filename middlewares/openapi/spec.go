@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/Sirupsen/logrus"
+	apierrors "github.com/go-openapi/errors"
 	"github.com/go-openapi/loads"
 	"github.com/go-openapi/spec"
 	"github.com/go-openapi/strfmt"
@@ -285,14 +288,12 @@ func (p *Permission) Code() string {
 
 // validateRequest validate the current request args
 func (p *Permission) validateRequest(req *http.Request) []*vError {
-	var verr *vError
 	var errs = []*vError{}
 
 	parameters := []spec.Parameter{}
 	parameters = append(parameters, p.spi.Parameters...)
 	parameters = append(parameters, p.op.Parameters...)
 
-	log.Warnf("in developing ...")
 	allowedQueryParams := []string{}
 
 	for _, parameter := range parameters {
@@ -310,28 +311,32 @@ func (p *Permission) validateRequest(req *http.Request) []*vError {
 			continue
 		}
 
-		// fmt.Printf("    name: %s, in: %s, type: %s, type_name: %s, format: %s, op: %#v\n", parameter.Name, parameter.In, parameter.Type, parameter.TypeName(), parameter.Format, parameter)
+		// fmt.Printf("    Name: %s\n", parameter.Name)
+		// fmt.Printf("    Type: %s\n", parameter.Type)
+		// fmt.Printf("    TypeName(): %s\n", parameter.TypeName())
+		// fmt.Printf("    Format: %s\n", parameter.Format)
+		// fmt.Printf("    In: %s\n", parameter.In)
+		// fmt.Printf("    op: %#v\n", parameter)
 
 		switch parameter.In {
 		case "query":
 			allowedQueryParams = append(allowedQueryParams, parameter.Name)
-			verr = p.validateQeuryParameter(&parameter, req.URL.Query())
+			errs = append(errs, p.validateQeuryParameter(&parameter, req.URL.Query()))
 		case "path":
-			verr = p.validatePathParameter(&parameter, req.URL.Query())
+			errs = append(errs, p.validatePathParameter(&parameter, req))
 		case "header":
-			verr = p.validateHeaderParameter(&parameter, req.URL.Query())
+			errs = append(errs, p.validateHeaderParameter(&parameter, req))
+		case "body":
+			errs = append(errs, p.validateBodyParameter(&parameter, req)...)
 		default:
-			verr = &vError{
+			errs = append(errs, &vError{
 				Name:    name,
 				Code:    "unknown-parameter-in",
 				Message: fmt.Sprintf("unknown parameter in: %s\n", parameter.In),
-			}
-		}
-		if verr != nil {
-			errs = append(errs, verr)
+			})
 		}
 	}
-	// log.Debugf("%s:%s allowedQueryParams = %v\n", p.method, p.path, allowedQueryParams)
+	log.Debugf("%s:%s allowedQueryParams = %v\n", p.method, p.path, allowedQueryParams)
 	if len(errs) == 0 {
 		return nil
 	}
@@ -352,21 +357,10 @@ func (p *Permission) validateQeuryParameter(parameter *spec.Parameter, q url.Val
 	}
 
 	v := q.Get(p.Name)
-	// fmt.Printf("p.Name = %s, p.Type = %s, p.Enum = %#v, v = %s\n", parameter.Name, parameter.Type, parameter.Enum, v)
-
-	switch parameter.Type {
-	case "integer":
-		return validateInteger(parameter, v)
-	case "float":
-		return validateFloat(parameter, v)
-	case "string":
-		return validateString(parameter, v)
-	}
-
-	return nil
+	return validateParameterStringValue(parameter, v)
 }
 
-func (p *Permission) validatePathParameter(parameter *spec.Parameter, q url.Values) *vError {
+func (p *Permission) validatePathParameter(parameter *spec.Parameter, req *http.Request) *vError {
 	v, ok := p.routeMatch.Vars[parameter.Name]
 	if !ok {
 		// all path parameter is required
@@ -377,6 +371,101 @@ func (p *Permission) validatePathParameter(parameter *spec.Parameter, q url.Valu
 		}
 	}
 
+	return validateParameterStringValue(parameter, v)
+}
+
+func (p *Permission) validateHeaderParameter(parameter *spec.Parameter, req *http.Request) *vError {
+	_, ok := req.Header[parameter.Name]
+	if !ok {
+		// all path parameter is required
+		return &vError{
+			Name:    parameter.Name,
+			Code:    "required",
+			Message: fmt.Sprintf("path parameter (%s) is required", parameter.Name),
+		}
+	}
+
+	v := req.Header.Get(parameter.Name)
+	return validateParameterStringValue(parameter, v)
+}
+
+func (p *Permission) validateBodyParameter(parameter *spec.Parameter, req *http.Request) (errs []*vError) {
+	errs = []*vError{}
+
+	buf, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		errs = append(errs, &vError{
+			Name:    parameter.Name,
+			Code:    "read-body-error",
+			Message: fmt.Sprintf("read request body failed: %s\n", err),
+		})
+		return errs
+	}
+
+	_type := parameter.Schema.Type
+	logrus.Debugf("body schema type: %v\n", _type)
+	if _type.Contains("object") {
+		obj := map[string]interface{}{}
+		if err := json.Unmarshal(buf, &obj); err != nil {
+			errs = append(errs, &vError{
+				Name:    parameter.Name,
+				Code:    "unmarshal-body-error",
+				Message: fmt.Sprintf("unmarshal the request body (object) failed: %s\n", err),
+			})
+			return errs
+		}
+		errs = append(errs, validatebySchema(parameter.Schema, obj)...)
+	} else if _type.Contains("array") {
+		obj := []interface{}{}
+		if err := json.Unmarshal(buf, &obj); err != nil {
+			errs = append(errs, &vError{
+				Name:    parameter.Name,
+				Code:    "unmarshal-body-error",
+				Message: fmt.Sprintf("unmarshal the request body (array) failed: %s\n", err),
+			})
+			return errs
+		}
+		errs = append(errs, validatebySchema(parameter.Schema, obj)...)
+	} else {
+		errs = append(errs, &vError{
+			Name:    parameter.Name,
+			Code:    "unknown-body-type",
+			Message: fmt.Sprintf("unknown body type: %s\n", parameter.Type),
+		})
+	}
+
+	if len(errs) == 0 {
+		req.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
+	}
+
+	return errs
+}
+
+func validatebySchema(sch *spec.Schema, data interface{}) (errs []*vError) {
+	errs = []*vError{}
+
+	err := validate.AgainstSchema(sch, data, strfmt.Default)
+	ves, ok := err.(*apierrors.CompositeError)
+	if ok && len(ves.Errors) > 0 {
+		for _, e := range ves.Errors {
+			ve := e.(*apierrors.Validation)
+			log.Debugf("ve = %#v\n", ve)
+			name := strings.TrimPrefix(ve.Name, ".")
+			if name == "" {
+				name = fmt.Sprintf("%v", ve.Value)
+			}
+			errs = append(errs, &vError{
+				Name:    name,
+				Code:    "validate-error",
+				Message: strings.TrimPrefix(ve.Error(), "."),
+			})
+		}
+	}
+
+	return errs
+}
+
+func validateParameterStringValue(parameter *spec.Parameter, v string) *vError {
 	switch parameter.Type {
 	case "integer":
 		return validateInteger(parameter, v)
@@ -384,13 +473,14 @@ func (p *Permission) validatePathParameter(parameter *spec.Parameter, q url.Valu
 		return validateFloat(parameter, v)
 	case "string":
 		return validateString(parameter, v)
+	case "":
+		return &vError{
+			Name:    parameter.Name,
+			Code:    "unknown-parameter-type",
+			Message: fmt.Sprintf("unknown type (%s) for parameter (%s)", parameter.Type, parameter.Name),
+		}
 	}
 
-	return nil
-}
-
-func (p *Permission) validateHeaderParameter(parameter *spec.Parameter, q url.Values) *vError {
-	log.Warnf("uncompleted header parameter validate ...")
 	return nil
 }
 
