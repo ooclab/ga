@@ -1,0 +1,346 @@
+swagger: '2.0'
+info:
+  version: '1.0'
+  title: 'ga.service'
+  description: |
+    `ga.service` -- 管理服务的服务
+
+    ## 约定
+
+    - 命名中英文无论单复数尽量统一用单数形式
+    - 表示时间的字符串如无特别说明，统一指 RFC3339 UTC 格式，示例： `2017-05-30T01:45:39.871980Z`
+
+  contact:
+    name: OOCLAB
+    url: 'https://ooclab.com'
+    email: info@ooclab.com
+
+host: localhost:3000
+schemes:
+- http
+
+tags:
+- name: service
+  description: 服务
+
+paths:
+
+  "/_health":
+    get:
+      tags:
+      - default
+      summary: 查看健康状态
+      responses:
+        "200":
+          description: 返回 "ok" 表示服务运行健康
+
+  "/service":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+
+    get:
+      tags:
+      - service
+      summary: 获取所有服务列表
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            required:
+            - data
+            properties:
+              data:
+                type: array
+                items:
+                  $ref: '#/definitions/ServiceSimple'
+        default:
+          description: 返回错误信息
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    post:
+      tags:
+      - service
+      summary: 创建新服务
+      consumes:
+      - multipart/form-data
+      parameters:
+      - name: openapi
+        in: formData
+        required: true
+        type: file
+        description: OpenAPI 文件
+      - name: name
+        in: formData
+        required: true
+        type: string
+        description: 服务名称
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                default: "success"
+              id:
+                type: string
+                format: uuid
+                description: 成功创建的服务 ID
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `name-exist` : 名字已经存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/service/{id}":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+    - $ref: '#/parameters/PathServiceID'
+
+    get:
+      tags:
+      - service
+      summary: 获取指定服务详情
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                default: "success"
+              data:
+                $ref: '#/definitions/Service'
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 名称不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    post:
+      tags:
+      - service
+      summary: 更新指定服务属性
+      parameters:
+      - name: body
+        in: body
+        schema:
+          type: object
+          properties:
+            summary:
+              type: string
+              description: 描述
+              maxLength: 256
+            description:
+              type: string
+              description: 详细描述
+              maxLength: 8192
+      responses:
+        "200":
+          description: OK
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 名称不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    delete:
+      tags:
+      - service
+      summary: 删除指定服务
+      description: |
+        删除服务注意：
+        1. 如何和服务启动/停止结合？通知 ga ?
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                default: "success"
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 名称不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/service/{id}/openapi":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+    - $ref: '#/parameters/PathServiceID'
+
+    post:
+      tags:
+      - service
+      summary: 更新服务的 OpenAPI 文档
+      consumes:
+      - multipart/form-data
+      parameters:
+      - name: openapi
+        in: formData
+        required: true
+        type: file
+        description: OpenAPI 文件
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                default: "success"
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 名称不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+
+definitions:
+
+  DefaultErrorResponse:
+    type: object
+    required:
+    - status
+    properties:
+      status:
+        type: string
+        description: 错误字符串
+      errors:
+        type: array
+        description: 有多个错误值时（通常发生在验证表单失败时）
+        items:
+          type: object
+          required:
+          - name
+          - code
+          properties:
+            name:
+              type: string
+              description: 错误名称，如果是字段错误，即为字段名称
+            code:
+              type: string
+              description: 错误代码，请使用“固定”字符串描述准确的错误
+            message:
+              type: string
+              description: 详细的错误信息
+      data:
+        type: object
+        description: 接口自定义。如 tornado python 实现的接口，我们使用异常信息。
+        properties:
+          status_code:
+            type: integer
+            format: int
+            description: 错误码
+          exc_info:
+            type: string
+            description: 详细错误信息
+
+  ServiceSimple:
+    type: object
+    description: 服务
+    required:
+    - id
+    - name
+    - version
+    - summary
+    - status
+    - updated
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: ID
+      name:
+        type: string
+        description: 名称
+      version:
+        type: string
+        description: 版本
+      summary:
+        type: string
+        description: 描述
+      status:
+        type: string
+        description: 当前状态
+      updated:
+        type: string
+        description: 更新时间
+
+  Service:
+    type: object
+    description: 服务详情
+    required:
+    - id
+    - name
+    - version
+    - summary
+    - description
+    - status
+    - created
+    - updated
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: ID
+      name:
+        type: string
+        description: 名字
+      version:
+        type: string
+        description: 版本
+      summary:
+        type: string
+        description: 描述
+      description:
+        type: string
+        description: 详细描述
+      status:
+        type: string
+        description: 状态
+      created:
+        type: string
+        format: date-time
+        description: 创建时间
+      updated:
+        type: string
+        format: date-time
+        description: 更新时间
+
+
+parameters:
+
+  Authorization:
+    name: Authorization
+    in: header
+    type: string
+    description: 提供 JWT Token, 格式 `"Bearer {TOKEN}"`
+    required: true
+
+  PathServiceID:
+    name: id
+    in: path
+    required: true
+    type: string
+    description: 服务ID

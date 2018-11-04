@@ -4,28 +4,30 @@ services:
     ga:
         image: ga:v1
         volumes:
-            - "./config.yml:/etc/ga/config.yml"
+            - "./config.toml:/etc/ga/config.toml"
         environment:
             GA_DEBUG: "true"
-            GA_SERVICE: authz
+            GA_SERVICE: service
         depends_on:
             - api
         networks:
             - default
             - traefik
         labels:
-            traefik.backend: authz
-            traefik.frontend.rule: PathPrefixStrip:/authz
+            traefik.backend: service
+            traefik.frontend.rule: PathPrefixStrip:/service
             traefik.docker.network: ga-deploy-traefik
 
     api:
-        image: ooclab/authz:v0.9.1
+        image: ooclab/service:v0.9
         environment:
-            DB_URI: "postgresql+pg8000://root:password@postgres:5432/authz"
+            DB_URI: "postgresql+pg8000://root:password@postgres:5432/service"
             ETCD_ENDPOINTS: "etcd:2379"
+            INTERNAL_APIGATEWAY: "http://ga:2998"
         depends_on:
             - postgres
-        # authz need access etcd
+        # service need access etcd
+        # TODO: ga forward tcp to etcd ?
         networks:
             - default
             - traefik
@@ -35,7 +37,7 @@ services:
     postgres:
         image: postgres:10.5
         environment:
-            POSTGRES_DB: authz
+            POSTGRES_DB: service
             POSTGRES_USER: root
             POSTGRES_PASSWORD: password
         labels:

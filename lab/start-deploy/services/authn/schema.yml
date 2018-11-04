@@ -1,0 +1,764 @@
+swagger: '2.0'
+info:
+  version: '1.0'
+  title: 'authn'
+  description: |
+    AuthN 服务 -- 提供用户身份鉴定服务
+
+    ## 约定
+
+    - 命名中英文无论单复数尽量统一用单数形式
+    - 表示时间的字符串如无特别说明，统一指 RFC3339 UTC 格式，示例： `2017-05-30T01:45:39.871980Z`
+
+    ## 设计思考
+
+    分两种角色：
+    1. 用户及其创建的应用（App）角色：即我的账户/应用。可以获取/刷新 token、创建/更新/删除 App
+    2. 管理员角色：创建/更新/删除用户
+
+    用户管理，用户属性，和其他账户集成等功能，留在定制化的 account 服务完成。
+
+  contact:
+    name: OOCLAB
+    url: 'https://ooclab.com'
+    email: info@ooclab.com
+
+host: localhost:3000
+schemes:
+- http
+
+tags:
+- name: token
+  description: 获取 / 刷新 access_token
+- name: app
+  description: App
+- name: user
+  description: 用户
+
+
+paths:
+
+  "/_health":
+    get:
+      tags:
+      - default
+      summary: 查看健康状态
+      responses:
+        "200":
+          description: 返回 "ok" 表示服务运行健康
+
+  "/_spec":
+    get:
+      tags:
+      - default
+      summary: 获取 YAML 格式的 SwaggerUI 文档（即本文档）
+      produces:
+      - application/yaml
+      responses:
+        "200":
+          description: 返回 YAML 文档
+
+  "/user/token":
+
+    post:
+      tags:
+      - token
+      summary: 通过用户名和密码获取 token
+      description: |
+        用户登录，获取 Token (JWT)
+
+        应用场景：
+        1. 传统Web服务（如MVC）：通常是其他服务（如 `account`），调用该接口获取用户的 token ，然后封装为自己的 Session , 以 cookies 形式返回给用户端（如浏览器）
+        2. 现代浏览器端页面渲染技术（如ReactJS/VueJS）：Web 前端可以直接调用该接口获取 token ，保存在浏览器端，后面需要验证的请求带上该 token 即可
+      parameters:
+      - name: body
+        in: body
+        description: 请求数据
+        schema:
+          type: object
+          required:
+          - username
+          - password
+          properties:
+            username:
+              type: string
+              description: 用户名
+            password:
+              type: string
+              description: 密码
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            required:
+            - status
+            - data
+            properties:
+              status:
+                $ref: '#/definitions/Status'
+              data:
+                $ref: '#/definitions/ResponseTokenData'
+        default:
+          description: |
+            返回错误信息
+
+            error 值及含义：
+            - `username-or-password-incorrect` : 用户名或密码错误
+            - `user-inactive` : 用户已被禁用，请联系管理员
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/user/token/refresh":
+
+    post:
+      tags:
+      - token
+      summary: 刷新用户的 token
+      description: |
+        用户或App都可以通过 refresh_token 刷新 access_token
+      parameters:
+      - name: body
+        in: body
+        description: 请求数据
+        schema:
+          type: object
+          required:
+          - refresh_token
+          properties:
+            refresh_token:
+              type: string
+              description: refresh token
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            required:
+            - status
+            - data
+            properties:
+              status:
+                $ref: '#/definitions/Status'
+              data:
+                $ref: '#/definitions/ResponseTokenData'
+        default:
+          description: |
+            返回错误信息
+
+            error 值及含义：
+            - `need-refresh-token` : 请求未提供 `refresh_token` 参数
+            - `invalid-refresh-token` : 提供了无效的 `refresh_token`
+            - `is-expired` : `refresh_token` 已经过期，请重新“登录”
+            - `user-inactive` : 用户已被禁用，请联系管理员
+            - `invalid-access-type` : 应该不会出现
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/app/token":
+
+    post:
+      tags:
+      - token
+      summary: 应用获取 token
+      description: |
+        应用程序获取 access_token ，结果与使用用户名和密码登录的方式一样。
+        区别：
+        1. 一个用户可以拥有多个 App，每个 App 有自己的认证凭证，适合在不同场合使用
+        2. App 获取的 access_token 有效期比普通登录的方式要长
+      parameters:
+      - name: body
+        in: body
+        description: 请求数据
+        schema:
+          type: object
+          required:
+          - app_id
+          - app_secret
+          properties:
+            app_id:
+              type: string
+              format: uuid
+              description: 应用ID
+            app_secret:
+              type: string
+              description: 应用密钥
+              maxLength: 128
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            required:
+            - status
+            - data
+            properties:
+              status:
+                $ref: '#/definitions/Status'
+              data:
+                $ref: '#/definitions/ResponseTokenData'
+        default:
+          description: |
+            返回错误信息
+
+            error 值及含义：
+            - `incorrect-key-or-secret` : `api_key` 或 `api_secret` 错误
+            - `inactive-app` : App 已被禁用，请启用后再尝试
+            - `inactive-user` : 用户已被禁用，请联系管理员
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/app/token/refresh":
+
+    post:
+      tags:
+      - token
+      summary: 刷新 token
+      description: |
+        用户或App都可以通过 refresh_token 刷新 access_token
+      parameters:
+      - name: body
+        in: body
+        description: 请求数据
+        schema:
+          type: object
+          required:
+          - app_id
+          - refresh_token
+          properties:
+            app_id:
+              type: string
+              format: uuid
+              description: 应用ID
+            refresh_token:
+              type: string
+              description: refresh token
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            required:
+            - status
+            - data
+            properties:
+              status:
+                $ref: '#/definitions/Status'
+              data:
+                $ref: '#/definitions/ResponseTokenData'
+        default:
+          description: |
+            返回错误信息
+
+            error 值及含义：
+            - `need-refresh-token` : 请求未提供 `refresh_token` 参数
+            - `invalid-refresh-token` : 提供了无效的 `refresh_token`
+            - `is-expired` : `refresh_token` 已经过期，请重新“登录”
+            - `user-inactive` : 用户已被禁用，请联系管理员
+            - `invalid-access-type` : 应该不会出现
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/app":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+
+    get:
+      tags:
+      - app
+      summary: 查看我的所有App
+      description: |
+        用户查看自己的所有 App
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            required:
+            - status
+            - data
+            properties:
+              status:
+                $ref: '#/definitions/Status'
+              data:
+                type: array
+                items:
+                  $ref: '#/definitions/AppSimple'
+
+    post:
+      tags:
+      - app
+      summary: 创建我的App
+      description: |
+        用户创建一个新的 App
+      parameters:
+      - name: body
+        in: body
+        description: 请求数据
+        schema:
+          type: object
+          required:
+          - name
+          - api_secret
+          - summary
+          properties:
+            name:
+              type: string
+              description: 名字（不能重复）
+            api_secret:
+              type: string
+              minLength: 32
+              maxLength: 128
+              description: 密码
+            summary:
+              type: string
+              description: 简短描述
+            description:
+              type: string
+              description: 详细描述
+            is_active:
+              type: boolean
+              description: 是否启用
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ObjectCreateSuccess'
+        default:
+          description: |
+            返回错误信息
+
+            error 值及含义：
+            - `duplicate-app-name` : 名称重复
+            - `reach-max-app` : 超过允许的 App 数量（默认为5个）
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/app/{id}":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+    - name: id
+      in: path
+      type: string
+      format: uuid
+      required: true
+      description: 应用ID
+
+    get:
+      tags:
+      - app
+      summary: 查看指定应用详情
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            properties:
+              status:
+                $ref: '#/definitions/Status'
+              data:
+                $ref: '#/definitions/App'
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 应用不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    post:
+      tags:
+      - app
+      summary: 更新指定应用属性
+      parameters:
+      - name: body
+        in: body
+        description: 请求数据
+        schema:
+          type: object
+          properties:
+            name:
+              type: string
+              description: 名字（必须在当前账户下唯一）
+              minLength: 2
+              maxLength: 16
+            api_secret:
+              type: string
+              description: 密码
+              minLength: 16
+              maxLength: 128
+            is_active:
+              type: boolean
+              description: 是否可用
+            summary:
+              type: string
+              description: 简介
+            description:
+              type: string
+              description: 详细描述
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/DefaultSuccessResponse'
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 应用不存在
+            - `name-exist` : 名称已经存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    delete:
+      tags:
+      - app
+      summary: 删除指定应用
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/DefaultSuccessResponse'
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 应用不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/user":
+
+    post:
+      tags:
+      - user
+      summary: 创建用户
+      description: |
+        需要权限 `auth-user-create`
+      parameters:
+      - $ref: '#/parameters/Authorization'
+      - name: body
+        in: body
+        schema:
+          type: object
+          required:
+          - username
+          - password
+          properties:
+            username:
+              type: string
+              description: 用户名（必须全局唯一）
+              minLength: 2
+              maxLength: 32
+            password:
+              type: string
+              description: 密码
+              maxLength: 64
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ObjectCreateSuccess'
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `username-exist` : 用户名已存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+  "/user/{id}":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+    - name: id
+      in: path
+      type: string
+      format: uuid
+      required: true
+      description: 用户UID
+
+    get:
+      tags:
+      - user
+      summary: 查看用户信息
+      description: |
+        需要权限 `auth-user-view`
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            required:
+            - status
+            - data
+            properties:
+              status:
+                $ref: '#/definitions/Status'
+              data:
+                $ref: '#/definitions/User'
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 用户不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    post:
+      tags:
+      - user
+      summary: 更新用户信息
+      description: |
+        需要权限 `auth-user-edit`
+      parameters:
+      - name: body
+        in: body
+        description: 请求数据
+        schema:
+          type: object
+          properties:
+            username:
+              type: string
+              description: 更新用户名（username必须全局唯一）
+              minLength: 5
+              maxLength: 16
+            password:
+              type: string
+              description: 更新密码
+              minLength: 6
+              maxLength: 32
+            is_active:
+              type: boolean
+              description: 是否可用
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/DefaultSuccessResponse'
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 用户不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+    delete:
+      tags:
+      - user
+      summary: 删除指定用户
+      description: |
+        分布式系统中删除指定用户涉及多个流程，举例：
+        1. authn 禁止用户（删除中）
+        2. authn 发布删除用户消息
+        3. 其他系统订阅/查询到某个用户已经被删除，清理内部数据
+        4. authn 发现所有信息已经被清理，完成最终删除
+
+        如何让 authn 知道当前所有依赖的系统中，用户数据已经被清理完成？
+        可能的方法有：
+        1. 服务之间关联，以及跨服务对象的关联，需要统一注册和保存（这是另外一个独立服务）。被关联/订阅者可以通过该服务获取其他人信息（有必要？），也可以通过该服务获取某个对象删除，依赖的系统是否清理完成（有必要）。
+
+        当前先清理本系统，无论如何，其他系统需要自行处理用户已经被删除的“异常”
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/DefaultSuccessResponse'
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 用户不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
+
+definitions:
+
+  Status:
+    type: string
+    description: |
+      接口请求结果
+
+      - `success` 表示成功
+      - 其他表示错误
+    default: "success"
+
+  ObjectCreateSuccess:
+    type: object
+    required:
+    - id
+    - status
+    properties:
+      status:
+        $ref: '#/definitions/Status'
+      id:
+        type: string
+        format: uuid
+        description: 成功创建的对象ID
+
+  DefaultSuccessResponse:
+    type: object
+    required:
+    - status
+    properties:
+      status:
+        type: string
+        description: 接口调用结果
+        default: "success"
+
+  ResponseTokenData:
+    type: object
+    required:
+    - access_token
+    - expires_in
+    - refresh_token
+    properties:
+      access_token:
+        type: string
+        description: jwt 格式的 token, 用户访问凭证
+      expires_in:
+        type: string
+        description: 表示 access_token 的失效时间
+      refresh_token:
+        type: string
+        description: 刷新 access_token 时用到
+
+  DefaultErrorResponse:
+    type: object
+    required:
+    - status
+    properties:
+      status:
+        type: string
+        description: 错误字符串
+      errors:
+        type: array
+        description: 有多个错误值时（通常发生在验证表单失败时）
+        items:
+          type: object
+          required:
+          - name
+          - code
+          properties:
+            name:
+              type: string
+              description: 错误名称，如果是字段错误，即为字段名称
+            code:
+              type: string
+              description: 错误代码，请使用“固定”字符串描述准确的错误
+            message:
+              type: string
+              description: 详细的错误信息
+      data:
+        type: object
+        description: 接口自定义。如 tornado python 实现的接口，我们使用异常信息。
+        properties:
+          status_code:
+            type: integer
+            format: int
+            description: 错误码
+          exc_info:
+            type: string
+            description: 详细错误信息
+
+  User:
+    type: object
+    required:
+    - id
+    - username
+    - is_active
+    - created
+    - updated
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: 应用ID
+      is_active:
+        type: boolean
+        description: 是否启用
+      username:
+        type: string
+        description: 用户名
+      created:
+        type: string
+        format: date-time
+        description: 创建时间
+      updated:
+        type: string
+        format: date-time
+        description: 更新时间
+
+  AppSimple:
+    type: object
+    description: |
+      **提示** `api_key` 这里显示, `api_secret` 由用户创建时提供，数据库不存放原始密码，因此无法显示，需要用户自行记录。
+    required:
+    - app_id
+    - is_active
+    - name
+    - summary
+    properties:
+      app_id:
+        type: string
+        format: uuid
+        description: 应用ID
+      is_active:
+        type: boolean
+        description: 是否启用
+      name:
+        type: string
+        description: 名字
+      summary:
+        type: string
+        description: 简介
+
+  App:
+    type: object
+    description: 用户（自己的）App详情
+    required:
+    - app_id
+    - is_active
+    - name
+    - summary
+    - description
+    - created
+    - updated
+    properties:
+      app_id:
+        type: string
+        format: uuid
+        description: ID
+      is_active:
+        type: boolean
+        description: 是否启用
+      name:
+        type: string
+        description: 名字
+      summary:
+        type: string
+        description: 简介
+      description:
+        type: string
+        description: 详细描述
+      created:
+        type: string
+        format: date-time
+        description: 创建时间
+      updated:
+        type: string
+        format: date-time
+        description: 更新时间
+
+parameters:
+
+  Authorization:
+    name: Authorization
+    in: header
+    type: string
+    description: 提供 JWT Token, 格式 `"Bearer {TOKEN}"`
+    required: true

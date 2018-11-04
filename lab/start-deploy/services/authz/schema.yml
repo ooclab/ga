@@ -35,9 +35,6 @@ paths:
     get:
       tags:
       - default
-      x-roles:
-      - authz-admin3
-      - apiview3
       summary: 获取 YAML 格式的 SwaggerUI 文档（即本文档）
       produces:
       - application/yaml
@@ -60,6 +57,7 @@ paths:
     - $ref: '#/parameters/Authorization'
 
     get:
+      deprecated: true
       tags:
       - authz
       summary: 检查用户权限（GET方法）
@@ -89,6 +87,7 @@ paths:
             $ref: '#/definitions/DefaultErrorResponse'
 
     post:
+      deprecated: true
       tags:
       - authz
       summary: 检查指定用户是否有对应的权限（使用权限名称）
@@ -131,6 +130,7 @@ paths:
     - $ref: '#/parameters/Authorization'
 
     get:
+      deprecated: true
       tags:
       - authz
       summary: 检查用户权限（GET方法）
@@ -160,6 +160,7 @@ paths:
             $ref: '#/definitions/DefaultErrorResponse'
 
     post:
+      deprecated: true
       tags:
       - authz
       summary: 检查指定用户是否有对应的权限（使用权限ID）
@@ -323,6 +324,43 @@ paths:
           schema:
             $ref: '#/definitions/DefaultErrorResponse'
 
+  "/permission/id":
+
+    parameters:
+    - $ref: '#/parameters/Authorization'
+
+    get:
+      tags:
+      - permission
+      summary: 通过给定的权限名获取权限ID
+      parameters:
+      - name: name
+        in: query
+        required: true
+        description: 权限名
+        type: string
+        maxLength: 512
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                default: "success"
+              id:
+                type: string
+                format: uuid
+                description: 权限ID
+        default:
+          description: |
+            返回错误信息
+            error 值及含义：
+            - `not-found` : 名称不存在
+          schema:
+            $ref: '#/definitions/DefaultErrorResponse'
+
   "/permission":
 
     parameters:
@@ -369,9 +407,6 @@ paths:
       tags:
       - permission
       summary: 创建权限
-      x-roles:
-      - admin
-      - create-permission
       parameters:
       - name: body
         in: body
@@ -379,7 +414,6 @@ paths:
           type: object
           required:
           - name
-          additionalProperties: false
           properties:
             name:
               type: string
@@ -841,14 +875,27 @@ definitions:
       status:
         type: string
         description: 错误字符串
-      message:
-        type: string
-        description: 错误描述信息
       errors:
-        type: string
+        type: array
         description: 有多个错误值时（通常发生在验证表单失败时）
+        items:
+          type: object
+          required:
+          - name
+          - code
+          properties:
+            name:
+              type: string
+              description: 错误名称，如果是字段错误，即为字段名称
+            code:
+              type: string
+              description: 错误代码，请使用“固定”字符串描述准确的错误
+            message:
+              type: string
+              description: 详细的错误信息
       data:
         type: object
+        description: 接口自定义。如 tornado python 实现的接口，我们使用异常信息。
         properties:
           status_code:
             type: integer
