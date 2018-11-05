@@ -45,10 +45,8 @@ func (auth *Auth) HasPermission(userID, permName string) error {
 	prm := stringSliceToMap(prl)
 
 	// anonymous
-	if userID == "" {
-		if _, ok := prm["anonymous"]; ok {
-			return nil
-		}
+	if _, ok := prm["anonymous"]; ok {
+		return nil
 	}
 
 	// authenticated
