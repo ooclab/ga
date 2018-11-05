@@ -1,0 +1,1085 @@
+{
+	"info": {
+		"_postman_id": "2fab096a-9e1c-4fd6-afec-9ef75e605a6b",
+		"name": "ga",
+		"description": "ga 开发",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "authn",
+			"item": [
+				{
+					"name": "/_health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{AUTHN_URL_PREFIX}}/_health",
+							"host": [
+								"{{AUTHN_URL_PREFIX}}"
+							],
+							"path": [
+								"_health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "/_spec",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{AUTHN_URL_PREFIX}}/_spec",
+							"host": [
+								"{{AUTHN_URL_PREFIX}}"
+							],
+							"path": [
+								"_spec"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "/token - 获取 access_token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "a974cce3-109f-4ba5-9b8f-96d67602542d",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									"pm.test(\"Status Success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"success\");",
+									"});",
+									"pm.test(\"Set Enviroment\", function () {",
+									"    var jsonData = pm.response.json(); ",
+									"    pm.environment.set(\"ACCESS_TOKEN\", jsonData.data.access_token);",
+									"    pm.environment.set(\"REFRESH_TOKEN\", jsonData.data.refresh_token);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"username\": \"{{USERNAME}}\",\n\t\"password\": \"{{PASSWORD}}\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHN_URL_PREFIX}}/token",
+							"host": [
+								"{{AUTHN_URL_PREFIX}}"
+							],
+							"path": [
+								"token"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "/token/refresh - 刷新 access_token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "a974cce3-109f-4ba5-9b8f-96d67602542d",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									"pm.test(\"Status Success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"success\");",
+									"    pm.environment.set(\"ACCESS_TOKEN\", jsonData.data.access_token);",
+									"    pm.environment.set(\"REFRESH_TOKEN\", jsonData.data.refresh_token);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"refresh_token\": \"{{REFRESH_TOKEN}}\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHN_URL_PREFIX}}/token/refresh",
+							"host": [
+								"{{AUTHN_URL_PREFIX}}"
+							],
+							"path": [
+								"token",
+								"refresh"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "/app - 创建我的 App",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "a974cce3-109f-4ba5-9b8f-96d67602542d",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									"pm.test(\"Status Success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"success\");",
+									"    pm.environment.set(\"MY_APP_ID\", jsonData.id);",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"name\": \"my-first-app\",\n\t\"app_secret\": \"{{MY_APP_SECRET}}\",\n\t\"summary\": \"My First App\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHN_URL_PREFIX}}/app",
+							"host": [
+								"{{AUTHN_URL_PREFIX}}"
+							],
+							"path": [
+								"app"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "/app_token - 获取我的 App Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "a974cce3-109f-4ba5-9b8f-96d67602542d",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									"pm.test(\"Status Success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"success\");",
+									"    pm.environment.set(\"APP_REFRESH_TOKEN\", jsonData.data.refresh_token);",
+									"    pm.environment.set(\"APP_ACCESS_TOKEN\", jsonData.data.access_token);",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"type": "text",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"app_id\": \"{{MY_APP_ID}}\",\n\t\"app_secret\": \"{{MY_APP_SECRET}}\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHN_URL_PREFIX}}/app_token",
+							"host": [
+								"{{AUTHN_URL_PREFIX}}"
+							],
+							"path": [
+								"app_token"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "/app_token/refresh - 刷新我的 App Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "a974cce3-109f-4ba5-9b8f-96d67602542d",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									"pm.test(\"Status Success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"success\");",
+									"    pm.environment.set(\"APP_ACCESS_TOKEN\", jsonData.data.access_token);",
+									"    pm.environment.set(\"APP_REFRESH_TOKEN\", jsonData.data.refresh_token);",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"app_id\": \"{{MY_APP_ID}}\",\n\t\"refresh_token\": \"{{APP_REFRESH_TOKEN}}\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHN_URL_PREFIX}}/app_token/refresh",
+							"host": [
+								"{{AUTHN_URL_PREFIX}}"
+							],
+							"path": [
+								"app_token",
+								"refresh"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "/app - 查看我所有的 App",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "a974cce3-109f-4ba5-9b8f-96d67602542d",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									"pm.test(\"Status Success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"success\");",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"type": "text",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"username\": \"{{USERNAME}}\",\n\t\"password\": \"{{PASSWORD}}\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHN_URL_PREFIX}}/app",
+							"host": [
+								"{{AUTHN_URL_PREFIX}}"
+							],
+							"path": [
+								"app"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "/app/{id} - 查看我的 App 详情",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "a974cce3-109f-4ba5-9b8f-96d67602542d",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									"pm.test(\"Status Success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"success\");",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"username\": \"{{USERNAME}}\",\n\t\"password\": \"{{PASSWORD}}\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHN_URL_PREFIX}}/app/{{MY_APP_ID}}",
+							"host": [
+								"{{AUTHN_URL_PREFIX}}"
+							],
+							"path": [
+								"app",
+								"{{MY_APP_ID}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "/app/{id} - 更新我的 App 属性",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "a974cce3-109f-4ba5-9b8f-96d67602542d",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									"pm.test(\"Status Success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"success\");",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"type": "text",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"name\": \"name-changed\",\n\t\"summay\": \"summary\",\n\t\"description\": \"description\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHN_URL_PREFIX}}/app/{{MY_APP_ID}}",
+							"host": [
+								"{{AUTHN_URL_PREFIX}}"
+							],
+							"path": [
+								"app",
+								"{{MY_APP_ID}}"
+							],
+							"query": [
+								{
+									"key": "",
+									"value": "",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "/app/{id} - 删除我的 App",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "a974cce3-109f-4ba5-9b8f-96d67602542d",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									"pm.test(\"Status Success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"success\");",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"type": "text",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"body": {},
+						"url": {
+							"raw": "{{AUTHN_URL_PREFIX}}/app/{{MY_APP_ID}}",
+							"host": [
+								"{{AUTHN_URL_PREFIX}}"
+							],
+							"path": [
+								"app",
+								"{{MY_APP_ID}}"
+							],
+							"query": [
+								{
+									"key": "",
+									"value": "",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "authz",
+			"item": [
+				{
+					"name": "GET /_health",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "c7f69029-14c3-434f-9b06-a2828db8d735",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"name\": \"MyFirstPermission\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHZ_URL_PREFIX}}/_health",
+							"host": [
+								"{{AUTHZ_URL_PREFIX}}"
+							],
+							"path": [
+								"_health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /_spec",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "c7f69029-14c3-434f-9b06-a2828db8d735",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"name\": \"MyFirstPermission\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHZ_URL_PREFIX}}/_spec",
+							"host": [
+								"{{AUTHZ_URL_PREFIX}}"
+							],
+							"path": [
+								"_spec"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /permission - 创建权限",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "c7f69029-14c3-434f-9b06-a2828db8d735",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									"pm.test(\"Status Success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"success\");",
+									"    pm.environment.set(\"MY_FIRST_PERMISSION_ID\", jsonData.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"name\": \"MyFirstPermission\",\n\t\"secondmiss\": \"abc\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHZ_URL_PREFIX}}/permission",
+							"host": [
+								"{{AUTHZ_URL_PREFIX}}"
+							],
+							"path": [
+								"permission"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /permission - 获取所有权限",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "c7f69029-14c3-434f-9b06-a2828db8d735",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{AUTHZ_URL_PREFIX}}/permission",
+							"host": [
+								"{{AUTHZ_URL_PREFIX}}"
+							],
+							"path": [
+								"permission"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /permission/{id} - 更新权限属性",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "c7f69029-14c3-434f-9b06-a2828db8d735",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"summary\": \"summary\",\n\t\"description\": \"decription\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHZ_URL_PREFIX}}/permission/{{MY_FIRST_PERMISSION_ID}}",
+							"host": [
+								"{{AUTHZ_URL_PREFIX}}"
+							],
+							"path": [
+								"permission",
+								"{{MY_FIRST_PERMISSION_ID}}"
+							],
+							"query": [
+								{
+									"key": "",
+									"value": "",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /permission/{id} - 查看权限详情",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "c7f69029-14c3-434f-9b06-a2828db8d735",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{AUTHZ_URL_PREFIX}}/permission/{{MY_FIRST_PERMISSION_ID}}",
+							"host": [
+								"{{AUTHZ_URL_PREFIX}}"
+							],
+							"path": [
+								"permission",
+								"{{MY_FIRST_PERMISSION_ID}}"
+							],
+							"query": [
+								{
+									"key": "",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "DELETE /permission/{id} - 删除权限",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "c7f69029-14c3-434f-9b06-a2828db8d735",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{AUTHZ_URL_PREFIX}}/permission/{{MY_FIRST_PERMISSION_ID}}",
+							"host": [
+								"{{AUTHZ_URL_PREFIX}}"
+							],
+							"path": [
+								"permission",
+								"{{MY_FIRST_PERMISSION_ID}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /role - 创建角色",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "c7f69029-14c3-434f-9b06-a2828db8d735",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									"pm.test(\"Status Success\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"success\");",
+									"    pm.environment.set(\"MY_FIRST_ROLE_ID\", jsonData.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"name\": \"MyFirstRole\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHZ_URL_PREFIX}}/role",
+							"host": [
+								"{{AUTHZ_URL_PREFIX}}"
+							],
+							"path": [
+								"role"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /role - 获取所有角色",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "c7f69029-14c3-434f-9b06-a2828db8d735",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{AUTHZ_URL_PREFIX}}/role",
+							"host": [
+								"{{AUTHZ_URL_PREFIX}}"
+							],
+							"path": [
+								"role"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST /role/{id} - 更新角色属性",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "c7f69029-14c3-434f-9b06-a2828db8d735",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{ACCESS_TOKEN}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"summary\": \"summary\",\n\t\"description\": \"decription\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHZ_URL_PREFIX}}/role/{{MY_FIRST_ROLE_ID}}",
+							"host": [
+								"{{AUTHZ_URL_PREFIX}}"
+							],
+							"path": [
+								"role",
+								"{{MY_FIRST_ROLE_ID}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "DELETE /role/{id} - 删除角色",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "c7f69029-14c3-434f-9b06-a2828db8d735",
+								"exec": [
+									"pm.test(\"Successful POST request\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"type": "text",
+								"value": "Bearer {{ACCESS_TOKEN}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"summary\": \"summary\",\n\t\"description\": \"decription\"\n}"
+						},
+						"url": {
+							"raw": "{{AUTHZ_URL_PREFIX}}/role/{{MY_FIRST_ROLE_ID}}",
+							"host": [
+								"{{AUTHZ_URL_PREFIX}}"
+							],
+							"path": [
+								"role",
+								"{{MY_FIRST_ROLE_ID}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
