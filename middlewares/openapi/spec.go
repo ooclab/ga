@@ -296,6 +296,8 @@ func (p *Permission) validateRequest(req *http.Request) []*vError {
 
 	allowedQueryParams := []string{}
 
+	var bodyBuf []byte
+
 	for _, parameter := range parameters {
 		name := parameter.Name
 
@@ -321,13 +323,40 @@ func (p *Permission) validateRequest(req *http.Request) []*vError {
 		switch parameter.In {
 		case "query":
 			allowedQueryParams = append(allowedQueryParams, parameter.Name)
-			errs = append(errs, p.validateQeuryParameter(&parameter, req.URL.Query()))
+			if ve := p.validateQeuryParameter(&parameter, req.URL.Query()); ve != nil {
+				errs = append(errs, ve)
+			}
 		case "path":
-			errs = append(errs, p.validatePathParameter(&parameter, req))
+			if ve := p.validatePathParameter(&parameter, req); ve != nil {
+				errs = append(errs, ve)
+			}
 		case "header":
-			errs = append(errs, p.validateHeaderParameter(&parameter, req))
+			if ve := p.validateHeaderParameter(&parameter, req); ve != nil {
+				errs = append(errs, ve)
+			}
 		case "body":
-			errs = append(errs, p.validateBodyParameter(&parameter, req)...)
+			if ves := p.validateBodyParameter(&parameter, req); len(ves) > 0 {
+				errs = append(errs, ves...)
+			}
+		case "formData":
+			// TODO: 和 validateBodyParameter 一起考虑
+			if len(bodyBuf) == 0 {
+				var err error
+				if bodyBuf, err = ioutil.ReadAll(req.Body); err != nil {
+					errs = append(errs, &vError{
+						Name:    parameter.Name,
+						Code:    "read-body-error",
+						Message: fmt.Sprintf("read request body failed: %s\n", err),
+					})
+					return errs
+				}
+				req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBuf))
+				// req.ParseForm()
+				req.ParseMultipartForm(32 << 20)
+			}
+			if ve := p.validateFormDataParameter(&parameter, req); ve != nil {
+				errs = append(errs, ve)
+			}
 		default:
 			errs = append(errs, &vError{
 				Name:    name,
@@ -338,6 +367,10 @@ func (p *Permission) validateRequest(req *http.Request) []*vError {
 	}
 	log.Debugf("%s:%s allowedQueryParams = %v\n", p.method, p.path, allowedQueryParams)
 	if len(errs) == 0 {
+		// !important! restore request body
+		if len(bodyBuf) != 0 {
+			req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBuf))
+		}
 		return nil
 	}
 	return errs
@@ -377,16 +410,52 @@ func (p *Permission) validatePathParameter(parameter *spec.Parameter, req *http.
 func (p *Permission) validateHeaderParameter(parameter *spec.Parameter, req *http.Request) *vError {
 	_, ok := req.Header[parameter.Name]
 	if !ok {
-		// all path parameter is required
-		return &vError{
-			Name:    parameter.Name,
-			Code:    "required",
-			Message: fmt.Sprintf("path parameter (%s) is required", parameter.Name),
+		if parameter.Required {
+			return &vError{
+				Name:    parameter.Name,
+				Code:    "required",
+				Message: fmt.Sprintf("header parameter (%s) is required", parameter.Name),
+			}
 		}
 	}
 
 	v := req.Header.Get(parameter.Name)
 	return validateParameterStringValue(parameter, v)
+}
+
+func (p *Permission) validateFormDataParameter(parameter *spec.Parameter, req *http.Request) *vError {
+	var ok bool
+	if parameter.Type == "file" {
+		_, ok = req.MultipartForm.File[parameter.Name]
+	} else {
+		_, ok = req.MultipartForm.Value[parameter.Name]
+	}
+	if !ok {
+		if parameter.Required {
+			return &vError{
+				Name:    parameter.Name,
+				Code:    "required",
+				Message: fmt.Sprintf("formData parameter (%s) is required", parameter.Name),
+			}
+		}
+	}
+
+	switch parameter.Type {
+	case "integer":
+	case "float":
+	case "string":
+		return validateParameterStringValue(parameter, req.Form.Get(parameter.Name))
+	case "file":
+		log.Debugf("pass parameter validate for file content (just validate required)")
+	default:
+		return &vError{
+			Name:    parameter.Name,
+			Code:    "unknown-parameter-type",
+			Message: fmt.Sprintf("unknown type (%s) for parameter (%s)", parameter.Type, parameter.Name),
+		}
+	}
+
+	return nil
 }
 
 func (p *Permission) validateBodyParameter(parameter *spec.Parameter, req *http.Request) (errs []*vError) {
@@ -473,15 +542,13 @@ func validateParameterStringValue(parameter *spec.Parameter, v string) *vError {
 		return validateFloat(parameter, v)
 	case "string":
 		return validateString(parameter, v)
-	case "":
+	default:
 		return &vError{
 			Name:    parameter.Name,
 			Code:    "unknown-parameter-type",
 			Message: fmt.Sprintf("unknown type (%s) for parameter (%s)", parameter.Type, parameter.Name),
 		}
 	}
-
-	return nil
 }
 
 func validateInteger(p *spec.Parameter, v string) *vError {
