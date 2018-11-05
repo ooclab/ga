@@ -57,7 +57,6 @@ paths:
     - $ref: '#/parameters/Authorization'
 
     get:
-      deprecated: true
       tags:
       - authz
       summary: 检查用户权限（GET方法）
@@ -87,7 +86,6 @@ paths:
             $ref: '#/definitions/DefaultErrorResponse'
 
     post:
-      deprecated: true
       tags:
       - authz
       summary: 检查指定用户是否有对应的权限（使用权限名称）
@@ -130,7 +128,6 @@ paths:
     - $ref: '#/parameters/Authorization'
 
     get:
-      deprecated: true
       tags:
       - authz
       summary: 检查用户权限（GET方法）
@@ -160,7 +157,6 @@ paths:
             $ref: '#/definitions/DefaultErrorResponse'
 
     post:
-      deprecated: true
       tags:
       - authz
       summary: 检查指定用户是否有对应的权限（使用权限ID）
@@ -618,43 +614,6 @@ paths:
           schema:
             $ref: '#/definitions/DefaultErrorResponse'
 
-  "/role/id":
-
-    parameters:
-    - $ref: '#/parameters/Authorization'
-
-    get:
-      tags:
-      - role
-      summary: 通过给定的角色名获取角色ID
-      parameters:
-      - name: name
-        in: query
-        required: true
-        description: 角色名
-        type: string
-        maxLength: 64
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: object
-            properties:
-              status:
-                type: string
-                default: "success"
-              id:
-                type: string
-                format: uuid
-                description: 角色ID
-        default:
-          description: |
-            返回错误信息
-            error 值及含义：
-            - `not-found` : 名称不存在
-          schema:
-            $ref: '#/definitions/DefaultErrorResponse'
-
   "/role/{id}":
 
     parameters:
@@ -755,26 +714,34 @@ paths:
             $ref: '#/definitions/DefaultErrorResponse'
 
 
-  "/role/{id}/permission/append":
+  "/role/permission/append":
 
     post:
       tags:
       - role
       summary: 为指定角色增加权限
+      description: |
+        注意：
+        1. 如果角色名称不存在，则创建该角色
+        2. 如果权限名称不存在，则创建该权限
       parameters:
       - $ref: '#/parameters/Authorization'
-      - $ref: '#/parameters/PathRoleID'
       - name: body
         in: body
         schema:
           type: object
+          required:
+          - role
+          - permissions
           properties:
+            role:
+              type: string
+              description: 角色名
             permissions:
               type: array
               items:
                 type: string
-                format: uuid
-                description: 权限ID
+                description: 权限名称
       responses:
         "200":
           description: OK
@@ -783,19 +750,9 @@ paths:
         default:
           description: 返回错误信息
           schema:
-            type: object
-            properties:
-              status:
-                type: string
-                default: "have-not-exist"
-              data:
-                type: array
-                items:
-                  type: string
-                  format: uuid
-                  description: 权限ID
+            $ref: '#/definitions/DefaultErrorResponse'
 
-  "/role/{id}/permission/remove":
+  "/role/permission/remove":
 
     post:
       tags:
@@ -808,13 +765,18 @@ paths:
         in: body
         schema:
           type: object
+          required:
+          - role
+          - permissions
           properties:
+            role:
+              type: string
+              description: 角色名
             permissions:
               type: array
               items:
                 type: string
-                format: uuid
-                description: 权限ID
+                description: 权限名称
       responses:
         "200":
           description: OK
@@ -832,8 +794,7 @@ paths:
                 type: array
                 items:
                   type: string
-                  format: uuid
-                  description: 权限ID
+                  description: 权限名称
 
 
 definitions:

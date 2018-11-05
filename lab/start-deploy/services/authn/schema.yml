@@ -300,13 +300,13 @@ paths:
           type: object
           required:
           - name
-          - api_secret
+          - app_secret
           - summary
           properties:
             name:
               type: string
               description: 名字（不能重复）
-            api_secret:
+            app_secret:
               type: string
               minLength: 32
               maxLength: 128

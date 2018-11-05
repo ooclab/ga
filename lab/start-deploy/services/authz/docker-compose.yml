@@ -22,6 +22,7 @@ services:
         image: ooclab/authz:v0.9.1
         environment:
             DB_URI: "postgresql+pg8000://root:password@postgres:5432/authz"
+            SYCN_ETCD: "True"
             ETCD_ENDPOINTS: "etcd:2379"
         depends_on:
             - postgres
