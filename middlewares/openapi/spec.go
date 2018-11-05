@@ -26,9 +26,9 @@ import (
 )
 
 type vError struct {
-	Name    string
-	Code    string
-	Message string
+	Name    string `json:"name"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 func loadSpec(content []byte) (*loads.Document, error) {
