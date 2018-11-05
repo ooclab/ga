@@ -58,7 +58,7 @@ paths:
         "200":
           description: 返回 YAML 文档
 
-  "/user/token":
+  "/token":
 
     post:
       tags:
@@ -109,7 +109,7 @@ paths:
           schema:
             $ref: '#/definitions/DefaultErrorResponse'
 
-  "/user/token/refresh":
+  "/token/refresh":
 
     post:
       tags:
@@ -155,7 +155,7 @@ paths:
           schema:
             $ref: '#/definitions/DefaultErrorResponse'
 
-  "/app/token":
+  "/app_token":
 
     post:
       tags:
@@ -208,7 +208,7 @@ paths:
           schema:
             $ref: '#/definitions/DefaultErrorResponse'
 
-  "/app/token/refresh":
+  "/app_token/refresh":
 
     post:
       tags:

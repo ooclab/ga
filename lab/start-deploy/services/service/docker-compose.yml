@@ -4,7 +4,7 @@ services:
     ga:
         image: ga:v1
         volumes:
-            - "./config.toml:/etc/ga/config.toml"
+            - "./config.yml:/etc/ga/config.yml"
         environment:
             GA_DEBUG: "true"
             GA_SERVICE: service
