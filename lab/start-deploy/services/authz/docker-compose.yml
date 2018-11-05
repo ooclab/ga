@@ -9,7 +9,7 @@ services:
             GA_DEBUG: "true"
             GA_SERVICE: authz
         depends_on:
-            - api
+            - authz-api
         networks:
             - default
             - traefik
@@ -18,7 +18,7 @@ services:
             traefik.frontend.rule: PathPrefixStrip:/authz
             traefik.docker.network: ga-deploy-traefik
 
-    api:
+    authz-api:
         image: ooclab/authz:v0.9.1
         environment:
             DB_URI: "postgresql+pg8000://root:password@postgres:5432/authz"

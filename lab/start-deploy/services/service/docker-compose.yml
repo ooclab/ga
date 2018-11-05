@@ -9,7 +9,7 @@ services:
             GA_DEBUG: "true"
             GA_SERVICE: service
         depends_on:
-            - api
+            - service-api
         networks:
             - default
             - traefik
@@ -18,7 +18,7 @@ services:
             traefik.frontend.rule: PathPrefixStrip:/service
             traefik.docker.network: ga-deploy-traefik
 
-    api:
+    service-api:
         image: ooclab/service:v0.9
         environment:
             DB_URI: "postgresql+pg8000://root:password@postgres:5432/service"
