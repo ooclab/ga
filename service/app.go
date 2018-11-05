@@ -48,10 +48,10 @@ func (app *App) getFullURL(url string) string {
 	return app.baseURL + url
 }
 
-// curl http://127.0.0.1:10080/authn/app/token \
+// curl http://127.0.0.1:10080/authn/app_token \
 //     -d '{"app_id": "9dc52220-f611-4300-9242-2aff30f7902a", "app_secret": "RqNIleKoWqrPozsizYWcveUSmglQZfSf"}'
 func (app *App) login() error {
-	url := app.getFullURL("/app/token")
+	url := app.getFullURL("/app_token")
 	resp, err := app.client.Post(url, map[string]string{
 		"app_id":     app.appID,
 		"app_secret": app.appSecret,
@@ -85,7 +85,7 @@ func (app *App) login() error {
 }
 
 func (app *App) doRefreshToken() error {
-	url := app.getFullURL("/app/token/refresh")
+	url := app.getFullURL("/app_token/refresh")
 	resp, err := app.Post(url, map[string]string{
 		"app_id":        app.appID,
 		"refresh_token": app.refreshToken,
