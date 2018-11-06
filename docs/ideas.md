@@ -1,6 +1,25 @@
 # Idea
 
 
+## 解绑 ga 和后端服务的关系
+
+ga 已经是一个 forwarder 抽象的管理者，但是由于之前的设计，
+ga 的 openapi middleware 目前和后端服务是一一绑定关系：
+
+> 意味着使用 openapi middleware 的 ga 还只是和一个后端服务绑定，
+
+这样的话，ga 就不能是自由扩展。
+
+下一步计划：
+
+> 将 ga 的所有 middleware 和后端服务解绑（目前只有 openapi 依赖后端的
+OpenAPI 2.0 Spec 文档）
+
+这样 ga 可以直接将 traefix / kong 当作后端, 支持水平扩展。比如 openapi middleware
+可以根据 URL PathPrefix (服务名参数也不需要，自行判断) 来加载不同的 Spec 对象，完成其流程。
+
+对于小型的应用，ga 可以替换 traefix / kong ，管理后端服务，只要加上 PathPrefix 和负载均衡即可。
+
 ## 支持可插拔的中间件（已完成）
 
 ga 的功能可以精简如下：
