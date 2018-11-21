@@ -1,6 +1,16 @@
 # Idea
 
 
+## 为旧的无验证服务提供自由的验证支持
+
+比如：
+1. docker registry , 加一个 auth 模块就可以支持账号系统
+2. 各种静态 Web 页面（如文档），可以加上用户验证（参考 kong + oidc / openid）
+3. 上面的静态资源还有下载站等
+
+用户及权限模块可以直接对接 [dex](https://github.com/dexidp/dex) / [keycloak](https://www.keycloak.org/)
+
+
 ## 解绑 ga 和后端服务的关系
 
 ga 已经是一个 forwarder 抽象的管理者，但是由于之前的设计，
