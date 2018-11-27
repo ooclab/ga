@@ -24,6 +24,7 @@ Current Middlewares:
 - \[x] [addauth](./middlewares/addauth) : manage `access_token` and `refresh_token` , add JWT with `Authorization` in HTTP Request Header auto
 - \[x] [openapi](./middlewares/openapi) : authorize permissions and validate request args with OpenAPI 2.0 Spec Document of the backend service
 - \[x] [debug](./middlewares/debug) : print http request data when debug is enable
+- \[ ] openapi-response : check the response for testing
 
 ## 简介
 
