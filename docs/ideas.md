@@ -1,6 +1,19 @@
 # Idea
 
 
+## 与 docker registry 结合，提供验证服务
+
+1. harbor 华而繁杂
+2. nexus 杂而不专
+
+搭建都很麻烦，而 CI/CD 这种频次较高的保存测试 image 的 registry 需求特点：
+1. 高频：用临时的 registry 存放即可（如果用生产环境的 harbor 存放，删除是个大麻烦）
+2. image 没有保存价值：定期重启 registry 就可以清空存储空间
+3. 跨主机访问：如果有验证，就可以放在公网上
+
+可以由 ga 提供 registry-auth 插件，为 docker registry (官方默认的 image ，无认证)提供
+兼容官方的验证方式（docker login）.
+
 ## 为旧的无验证服务提供自由的验证支持
 
 比如：
