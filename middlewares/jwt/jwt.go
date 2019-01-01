@@ -59,7 +59,10 @@ func (h *jwtMiddleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next
 	// do some stuff before
 
 	idToken := getIDToken(req)
-	if idToken != "" {
+	if idToken == "" {
+		// FIXME! deny a custome "X-User-Id" Header (supplied by bad user)
+		req.Header["X-User-Id"] = []string{}
+	} else {
 		uid, err := getUserID(idToken, h.pubKey)
 		if err != nil {
 			writeJSON(w, 403, map[string]string{"status": err.Error()})
