@@ -60,7 +60,7 @@ func (h *jwtMiddleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next
 
 	idToken := getIDToken(req)
 	if idToken == "" {
-		// FIXME! deny a custome "X-User-Id" Header (supplied by bad user)
+		// FIXME! deny a custom "X-User-Id" Header (supplied by bad user)
 		req.Header["X-User-Id"] = []string{}
 	} else {
 		uid, err := getUserID(idToken, h.pubKey)
