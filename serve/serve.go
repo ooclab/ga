@@ -184,6 +184,7 @@ func loadPlugin(cfg map[string]interface{}) (negroni.Handler, error) {
 	} {
 		p, err = plugin.Open(path)
 		if err == nil {
+			logrus.Debugf("load plugin (%s) success", path)
 			break
 		}
 		logrus.Debugf("load plugin (%s) failed: %s", path, err)
