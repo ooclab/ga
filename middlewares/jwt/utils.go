@@ -56,9 +56,16 @@ func getIDToken(req *http.Request) string {
 		}
 	}
 
+	// from cookies
+	if cookie, err := req.Cookie("access_token"); err == nil {
+		return cookie.Value
+	}
+
 	// Fetch access_token from URL query param
 	idToken := req.URL.Query().Get("access_token")
-	req.URL.Query().Del("access_token")
+	if idToken != nil {
+		req.URL.Query().Del("access_token")
+	}
 	return idToken
 }
 
