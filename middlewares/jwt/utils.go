@@ -63,7 +63,7 @@ func getIDToken(req *http.Request) string {
 
 	// Fetch access_token from URL query param
 	idToken := req.URL.Query().Get("access_token")
-	if idToken != nil {
+	if idToken != "" {
 		req.URL.Query().Del("access_token")
 	}
 	return idToken
