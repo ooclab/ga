@@ -1,10 +1,10 @@
 # Guardian Angel
 
-**G**uardian **A**ngel a lightweight middleware for service-oriented architecture.
+**G**uardian **A**ngel is a lightweight middleware for service-oriented architecture.
 
 What is the `service-oriented` here ?
 1. `big services` : export a http(s) api
-2. `small service`
+2. `small services`
    - microservices / nanoservices
    - serverless / FaaS
 
@@ -26,11 +26,7 @@ Current Middlewares:
 - \[x] [debug](./middlewares/debug) : print http request data when debug is enable
 - \[ ] openapi-response : check the response for testing
 
-## 简介
-
-ga 是一个缩写，可以有多种含义：
-1. **G**uardian **A**ngel (守护神)
-2. **G**eneral **A**gent (总代)
+------
 
 ## 目录
 
