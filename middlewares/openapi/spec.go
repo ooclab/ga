@@ -389,7 +389,7 @@ func (p *Permission) validateQeuryParameter(parameter *spec.Parameter, q url.Val
 		return nil
 	}
 
-	v := q.Get(p.Name)
+	v := q.Get(parameter.Name)
 	return validateParameterStringValue(parameter, v)
 }
 
