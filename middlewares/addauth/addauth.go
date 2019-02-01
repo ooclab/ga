@@ -6,6 +6,7 @@ import (
 
 	"github.com/codegangsta/negroni"
 	"github.com/ooclab/ga/service"
+	"github.com/Sirupsen/logrus"
 )
 
 type addauthMiddleware struct {
@@ -13,6 +14,9 @@ type addauthMiddleware struct {
 }
 
 func (h *addauthMiddleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
+	if err := h.app.CheckAccess(); err != nil {
+		logrus.Warnf("app access failed: %s\n", err)
+	}
 	// do some stuff before
 	if h.app.AccessToken != "" {
 		req.Header["Authorization"] = []string{fmt.Sprintf("Bearer %s", h.app.AccessToken)}
