@@ -91,6 +91,7 @@ func (client *Client) SendRequest(
 	serviceResp := &Response{HTTPResponse: resp}
 	if err := json.Unmarshal(respBody, &serviceResp.Body); err != nil {
 		logrus.Errorf("unmarshal body json failed: %s\n", err)
+		logrus.Debugf("respBody: %s\n", string(respBody[:]))
 		return nil, err
 	}
 

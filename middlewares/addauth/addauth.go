@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/codegangsta/negroni"
 	"github.com/ooclab/ga/service"
 )
@@ -26,10 +25,11 @@ func (h *addauthMiddleware) ServeHTTP(w http.ResponseWriter, req *http.Request, 
 func NewMiddleware(cfg map[string]interface{}) (negroni.Handler, error) {
 
 	app := service.NewApp()
-	if err := app.CheckAccess(); err != nil {
-		logrus.Errorf("app access failed: %s\n", err)
-		return nil, err
-	}
+	// 启动过程中不要测试可访问性，应为此时该服务很可能还没启动。容易形成循环依赖。
+	// if err := app.CheckAccess(); err != nil {
+	// 	logrus.Errorf("app access failed: %s\n", err)
+	// 	return nil, err
+	// }
 
 	return &addauthMiddleware{
 		app: app,
