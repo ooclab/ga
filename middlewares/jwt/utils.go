@@ -34,6 +34,9 @@ func getUserID(idToken string, pubKey []byte) (userid string, err error) {
 	token, err := jwt.Parse(idToken, func(token *jwt.Token) (interface{}, error) {
 		return jwt.ParseRSAPublicKeyFromPEM(pubKey)
 	})
+	if err != nil {
+		return "", err
+	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 		userid := fmt.Sprintf("%v", claims["uid"])
