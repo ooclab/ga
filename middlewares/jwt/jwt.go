@@ -70,14 +70,46 @@ func (h *jwtMiddleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next
 		// FIXME! deny a custom "X-User-Id" Header (supplied by bad user)
 		req.Header["X-User-Id"] = []string{}
 	} else {
+		if err := h.stillTokenValid(idToken); err != nil {
+			logrus.Errorf("token is invalid now: %s", err)
+			writeJSON(w, 403, map[string]string{"status": err.Error()})
+			return
+		}
+
 		uid, err := getUserID(idToken, h.pubKey)
 		if err != nil {
 			writeJSON(w, 403, map[string]string{"status": err.Error()})
 			return
 		}
+
+		if err := h.stillRequestorActive(uid); err != nil {
+			logrus.Errorf("requestor is inactive now: %s", err)
+			writeJSON(w, 403, map[string]string{"status": err.Error()})
+			return
+		}
+
 		req.Header["X-User-Id"] = []string{uid}
 	}
 
 	next(w, req)
 	// do some stuff after
+}
+
+func (this *jwtMiddleware) stillTokenValid(tok string) error {
+	// TODO: 确认当前 token 是否仍然有效（允许系统回收已经发出的 token）
+
+	// 1. ga 配置 token 签发时间不能早于某个时刻（如 time.Now()）
+	// 2. token claims 里有特殊配置
+	// 3. 比如用户自己删除的 token （会话），调用第三方服务
+
+	return nil
+}
+
+func (this *jwtMiddleware) stillRequestorActive(id string) error {
+	// TODO: 确认当前请求者是否仍然被许可（允许系统全局禁用用户）
+
+	// 1. token claims 里有特殊配置
+	// 2. 比如系统禁用某个用户，调用第三方服务
+
+	return nil
 }
