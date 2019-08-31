@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/codegangsta/negroni"
@@ -16,6 +17,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
+var connectErr = errors.New("network connect error")
 var log *logrus.Entry
 
 type config struct {
@@ -48,18 +50,24 @@ func (this *permRequest) String() string {
 }
 
 type middleware struct {
-	cfg    config
-	spec   *openapi3.Swagger
-	router *openapi3filter.Router
+	cfg        config
+	spec       *openapi3.Swagger
+	router     *openapi3filter.Router
+	specLoaded bool
 }
 
 func (this *middleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
+	if !this.specLoaded {
+		writeJSON(w, 400, map[string]interface{}{"error": "spec is missing"})
+		return
+	}
+
 	ctx := context.TODO()
 
 	// Find route
 	route, pathParams, err := this.router.FindRoute(req.Method, req.URL)
 	if err != nil {
-		logrus.Errorf("can not find operation for request: %s", err)
+		log.Errorf("can not find operation for request: %s", err)
 		writeJSON(w, 400, map[string]interface{}{"error": err.Error()})
 		return
 	}
@@ -80,7 +88,7 @@ func (this *middleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next
 
 	// 验证请求者是否有权限访问 api
 	if err := this.auth(pr); err != nil {
-		logrus.Errorf("auth for \"%s\" failed: %s", pr.String(), err)
+		log.Errorf("auth for \"%s\" failed: %s", pr.String(), err)
 		writeJSON(w, 400, map[string]interface{}{"error": err.Error()})
 		return
 	}
@@ -92,7 +100,7 @@ func (this *middleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next
 		Route:      route,
 	}
 	if err := openapi3filter.ValidateRequest(ctx, requestValidationInput); err != nil {
-		logrus.Errorf("valide request failed: %s", err)
+		log.Errorf("valide request failed: %s", err)
 		writeJSON(w, 400, map[string]interface{}{"error": "request invalid", "message": err.Error()})
 		return
 	}
@@ -106,9 +114,52 @@ func (this *middleware) auth(pr *permRequest) error {
 	return nil
 }
 
+func (this *middleware) loadSpec() error {
+	var err error
+
+	// loads openapi spec
+	var spec *openapi3.Swagger
+	addr := this.cfg.ServiceSpec
+	if addr[0] == '/' {
+		spec, err = openapi3.NewSwaggerLoader().LoadSwaggerFromFile(addr)
+	} else if strings.HasPrefix(addr, "http") {
+		var urlAddr *url.URL
+		urlAddr, err = url.Parse(addr)
+		if err != nil {
+			log.Errorf("parse url %s failed: %s", addr, err)
+			return err
+		}
+		spec, err = openapi3.NewSwaggerLoader().LoadSwaggerFromURI(urlAddr)
+	}
+	if err != nil {
+		log.Debugf("load spec from \"%s\" failed: %s", addr, err)
+		return err
+	}
+
+	// https://github.com/danielgtaylor/apisprout/blob/master/apisprout.go
+	// Clear the server list so no validation happens. Note: this has a side
+	// effect of no longer parsing any server-declared parameters.
+	spec.Servers = make([]*openapi3.Server, 0)
+
+	this.spec = spec
+	this.router = openapi3filter.NewRouter().WithSwagger(spec)
+
+	return nil
+}
+
+func (this *middleware) mustLoadSpec() {
+	for {
+		if err := this.loadSpec(); err == nil {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+	this.specLoaded = true
+	log.Infof("load spec from %s success", this.cfg.ServiceSpec)
+}
+
 // NewMiddleware create a new middleware
 func NewMiddleware(_cfg map[string]interface{}) (negroni.Handler, error) {
-	var err error
 	h := &middleware{
 		cfg: config{},
 	}
@@ -129,32 +180,7 @@ func NewMiddleware(_cfg map[string]interface{}) (negroni.Handler, error) {
 	// Fix UUID
 	openapi3.DefineStringFormat("uuid", `^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
-	// loads openapi spec
-	var spec *openapi3.Swagger
-	addr := h.cfg.ServiceSpec
-	if addr[0] == '/' {
-		spec, err = openapi3.NewSwaggerLoader().LoadSwaggerFromFile(addr)
-	} else if strings.HasPrefix(addr, "http") {
-		var urlAddr *url.URL
-		urlAddr, err = url.Parse(addr)
-		if err != nil {
-			logrus.Errorf("parse url %s failed: %s", addr, err)
-			return nil, err
-		}
-		spec, err = openapi3.NewSwaggerLoader().LoadSwaggerFromURI(urlAddr)
-	}
-	if err != nil {
-		logrus.Errorf("load spec from \"%s\" failed: %s", addr, err)
-		return nil, err
-	}
-
-	// https://github.com/danielgtaylor/apisprout/blob/master/apisprout.go
-	// Clear the server list so no validation happens. Note: this has a side
-	// effect of no longer parsing any server-declared parameters.
-	spec.Servers = make([]*openapi3.Server, 0)
-
-	h.spec = spec
-	h.router = openapi3filter.NewRouter().WithSwagger(spec)
+	go h.mustLoadSpec()
 
 	return h, nil
 }
@@ -164,7 +190,7 @@ func writeJSON(w http.ResponseWriter, statusCode int, data map[string]interface{
 	data["status"] = "fail"
 	jData, err := json.Marshal(data)
 	if err != nil {
-		// logrus.Errorf("marshal json failed: %s", err)
+		// log.Errorf("marshal json failed: %s", err)
 		statusCode = http.StatusInternalServerError
 	}
 	w.Header().Set("Content-Type", "application/json")
