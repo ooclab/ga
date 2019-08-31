@@ -1,8 +1,8 @@
 package main
 
 import (
+	"crypto/rsa"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -29,18 +29,21 @@ func loadPublicKeyFromEtcd(publicKeyPath string) ([]byte, error) {
 	return []byte(pubKey), nil
 }
 
-func getUserID(idToken string, pubKey []byte) (userid string, err error) {
-
+func getUserID(idToken string, pubKey *rsa.PublicKey) (userid string, err error) {
 	token, err := jwt.Parse(idToken, func(token *jwt.Token) (interface{}, error) {
-		return jwt.ParseRSAPublicKeyFromPEM(pubKey)
+		// TODO: support other
+		return pubKey, nil
 	})
 	if err != nil {
 		return "", err
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		userid := fmt.Sprintf("%v", claims["uid"])
-		return userid, nil
+		id, ok := claims["id"]
+		if !ok {
+			return "", nil
+		}
+		return id.(string), nil
 	}
 
 	return

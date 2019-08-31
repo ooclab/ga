@@ -1,18 +1,20 @@
 package main
 
 import (
+	"crypto/rsa"
 	"errors"
 	"net/http"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/codegangsta/negroni"
+	jwt "github.com/dgrijalva/jwt-go"
 )
 
 var log *logrus.Entry
 
 type jwtMiddleware struct {
 	name   string
-	pubKey []byte
+	pubKey *rsa.PublicKey
 	cfg    map[string]string
 }
 
@@ -48,9 +50,14 @@ func NewMiddleware(_cfg map[string]interface{}) (negroni.Handler, error) {
 		return nil, errors.New("no public key")
 	}
 
+	pub, err := jwt.ParseRSAPublicKeyFromPEM(pubKey)
+	if err != nil {
+		logrus.Errorf("load public key failed: %s\n", err)
+		return nil, err
+	}
 	return &jwtMiddleware{
 		name:   name,
-		pubKey: pubKey,
+		pubKey: pub,
 		cfg:    cfg,
 	}, nil
 }
