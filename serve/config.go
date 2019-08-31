@@ -1,7 +1,6 @@
 package serve
 
 var yamlConfigExample = []byte(`version: "1"
-
 # use the service and config
 services:
 
