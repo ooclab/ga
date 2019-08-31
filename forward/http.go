@@ -3,12 +3,14 @@ package forward
 import (
 	"context"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/codegangsta/negroni"
@@ -109,7 +111,35 @@ func NewSingleHostReverseProxy(target *url.URL) *httputil.ReverseProxy {
 		// TODO: make a choice
 		req.Host = target.Host
 	}
-	return &httputil.ReverseProxy{Director: director}
+	errHdr := func(w http.ResponseWriter, req *http.Request, err error) {
+		logrus.Errorf("w = %#v\nreq = %#v\nerr = %#v\n", w, req, err)
+		switch err := err.(type) {
+		case *net.OpError:
+			logrus.Debugf("proxy error: %s", err)
+			// https://stackoverflow.com/questions/19929386/handling-connection-reset-errors-in-go/49822466
+			if syscallErr, ok := err.Err.(*os.SyscallError); ok {
+				// https://golang.org/pkg/syscall/
+				// fmt.Printf("%#v\n", syscallErr)
+				switch syscallErr.Err {
+				case syscall.ENODATA:
+					logrus.Errorf("maybe backend server is offline: %s", err)
+					// TODO: set backend status & notify all middlewares ?
+				case syscall.ECONNRESET:
+					logrus.Errorf("ECONNRESET, forward to backend failed: %s", err)
+					// TODO: set backend status & notify all middlewares ?
+				case syscall.ECONNREFUSED:
+					logrus.Errorf("ECONNREFUSED, forward to backend failed: %s", err)
+					// TODO: set backend status & notify all middlewares ?
+				default:
+					logrus.Errorf("unknown syscall error: %s\n", err)
+					// TODO: set backend status & notify all middlewares ?
+				}
+			}
+		default:
+			logrus.Errorf("unknown proxy error: %s", err)
+		}
+	}
+	return &httputil.ReverseProxy{Director: director, ErrorHandler: errHdr}
 }
 
 func singleJoiningSlash(a, b string) string {
