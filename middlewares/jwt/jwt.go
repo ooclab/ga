@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/codegangsta/negroni"
 	jwt "github.com/dgrijalva/jwt-go"
 )

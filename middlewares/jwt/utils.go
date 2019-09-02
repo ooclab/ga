@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/ooclab/ga/service/etcd"
 )

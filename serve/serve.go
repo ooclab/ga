@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/codegangsta/negroni"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"

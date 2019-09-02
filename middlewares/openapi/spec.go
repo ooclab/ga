@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	apierrors "github.com/go-openapi/errors"
 	"github.com/go-openapi/loads"
 	"github.com/go-openapi/spec"

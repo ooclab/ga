@@ -6,7 +6,7 @@ import (
 
 	"github.com/codegangsta/negroni"
 	"github.com/ooclab/ga/service"
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 type addauthMiddleware struct {
