@@ -10,20 +10,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/codegangsta/negroni"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/mitchellh/mapstructure"
+	"github.com/sirupsen/logrus"
 )
 
 var connectErr = errors.New("network connect error")
 var log *logrus.Entry
 
 type config struct {
-	Name        string `mapstructure:"name"` // this middleware name
-	ServiceName string `mapstructure:"service_name"`
-	ServiceSpec string `mapstructure:"service_spec"`
+	Name          string `mapstructure:"name"` // this middleware name
+	ServiceName   string `mapstructure:"service_name"`
+	ServiceSpec   string `mapstructure:"service_spec"`
+	ServiceConfig struct {
+		PathPrefix string `mapstructure:"path_prefix"`
+	} `mapstructure:"service"`
 }
 
 func (c *config) init() error {
@@ -63,6 +66,11 @@ func (this *middleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next
 	}
 
 	ctx := context.TODO()
+
+	pathPrefix := this.cfg.ServiceConfig.PathPrefix
+	if len(pathPrefix) != 0 {
+		req.URL.Path = strings.TrimPrefix(req.URL.Path, pathPrefix)
+	}
 
 	// Find route
 	route, pathParams, err := this.router.FindRoute(req.Method, req.URL)

@@ -1,39 +1,26 @@
 package serve
 
-var yamlConfigExample = []byte(`version: "1"
-# use the service and config
-services:
-
-    etcd:
-        endpoints:
-            - etcd:2379
-
-    authn:
-        baseurl: http://traefik/authn
-        app_id: xxx
-        app_secret: xxx
-
+var yamlConfigExample = []byte(`version: "2"
 
 # start the forward server
-servers:
+listen: ":2999"
 
-    # forward the request from backend service to others (e.g. traefik)
-    internal:
-        type: http
-        listen: ":2998"
-        backend: http://traefik:10080
-        middlewares:
-            authadd: {}
+services:
 
-    # forward the request from api gateway to backend service (e.g. traefik)
-    external:
-        type: http
-        listen: ":2999"
-        backend: http://api:3000
-        middlewares:
-            uid:
-                public_key_etcd: ""
-            authz:
-                service_name: "myservice"
-                openapi_sepc_etcd: "/ga/service/myservice/openapi/spec"
+  S1:
+    path_prefix: /httpbin
+    backend: http://httpbin.ooclab.com
+    middlewares:
+    - name: logger
+    - name: debug
+  # forward the request from api gateway to backend service
+  S2:
+    path_prefix: /api/bfmanage/v1
+    backend: http://localhost:3002/bfmanage/v1
+    middlewares:
+    - name: logger
+    - name: debug
+    - name: openapi3
+      service_name: api
+      service_spec: "http://localhost:3002/bfmanage/v1"
 `)

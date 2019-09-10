@@ -2,6 +2,8 @@ package forward
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -9,42 +11,63 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"plugin"
 	"strings"
 	"syscall"
 
-	"github.com/sirupsen/logrus"
 	"github.com/codegangsta/negroni"
+	"github.com/gorilla/mux"
+	homedir "github.com/mitchellh/go-homedir"
+	"github.com/sirupsen/logrus"
 )
+
+var middlewareMap = map[string]func(cfg map[string]interface{}) (negroni.Handler, error){
+	"logger": func(map[string]interface{}) (negroni.Handler, error) { return negroni.NewLogger(), nil },
+}
+
+type ProxyConfig struct {
+	PathPrefix  string
+	BackendAddr *url.URL
+}
 
 // Idea:
 // 1. support a list of backend ?
 
 // HTTPForward forward a http request to the backend with custom middlewares
 type HTTPForward struct {
-	ctx         context.Context // for cancel
-	middlewares []negroni.Handler
-	listenTo    string   // address to listen on
-	backendAddr *url.URL // forward request to this backend
-	srv         http.Server
+	ctx      context.Context // for cancel
+	listenTo string          // address to listen on
+	srv      http.Server
+	services map[string]interface{}
 }
 
 // NewHTTPForward create a new http forward
-func NewHTTPForward(ctx context.Context, middlewares []negroni.Handler, listenTo string, backendAddr *url.URL) *HTTPForward {
+func NewHTTPForward(ctx context.Context, listenTo string, services map[string]interface{}) *HTTPForward {
 	return &HTTPForward{
-		ctx:         ctx,
-		middlewares: middlewares,
-		listenTo:    listenTo,
-		backendAddr: backendAddr,
-		srv:         http.Server{},
+		ctx:      ctx,
+		listenTo: listenTo,
+		srv:      http.Server{},
+		services: services,
 	}
 }
 
 // Run start http forward
-func (f *HTTPForward) Run() error {
-	handler, err := f.getRedirectHandler()
-	if err != nil {
-		logrus.Errorf("get redirect handler failed: %s\n", err)
-		return err
+func (this *HTTPForward) Run() error {
+
+	r := mux.NewRouter()
+
+	for name, _cfg := range this.services {
+		logrus.Debugf("loading config for services %s", name)
+		cfg := _cfg.(map[string]interface{})
+
+		hdr, err := this.getRedirectHandler(name, cfg)
+		if err != nil {
+			logrus.Errorf("get redirect handler failed: %s\n", err)
+			return err
+		}
+
+		pathPrefix := cfg["path_prefix"].(string)
+		r.PathPrefix(pathPrefix).Handler(hdr)
 	}
 
 	idleConnsClosed := make(chan struct{})
@@ -54,17 +77,17 @@ func (f *HTTPForward) Run() error {
 		<-sigint
 
 		// We received an interrupt signal, shut down.
-		if err := f.srv.Shutdown(f.ctx); err != nil {
+		if err := this.srv.Shutdown(this.ctx); err != nil {
 			// Error from closing listeners, or context timeout:
 			log.Printf("HTTP server Shutdown: %v", err)
 		}
 		close(idleConnsClosed)
 	}()
 
-	f.srv.Addr = f.listenTo
-	f.srv.Handler = handler
-	logrus.Infof("starting server on %s", f.srv.Addr)
-	if err := f.srv.ListenAndServe(); err != http.ErrServerClosed {
+	this.srv.Addr = this.listenTo
+	this.srv.Handler = r
+	logrus.Infof("starting server on %s", this.srv.Addr)
+	if err := this.srv.ListenAndServe(); err != http.ErrServerClosed {
 		// Error starting or closing listener:
 		log.Printf("HTTP server ListenAndServe: %v", err)
 	}
@@ -73,11 +96,44 @@ func (f *HTTPForward) Run() error {
 	return nil
 }
 
-func (f *HTTPForward) getRedirectHandler() (http.Handler, error) {
-	proxy := NewSingleHostReverseProxy(f.backendAddr)
+func (f *HTTPForward) getRedirectHandler(svc string, serviceConfig map[string]interface{}) (http.Handler, error) {
+	// load middlewares
+	var middlewares []negroni.Handler
+	if v, ok := serviceConfig["middlewares"]; ok {
+		var cfg []interface{}
+		switch v.(type) {
+		case nil:
+			logrus.Debugf("no middlewares found for %s, continue", svc)
+		case []interface{}:
+			cfg = v.([]interface{})
+		default:
+			logrus.Errorf("unsupport middlewares config type: %T\n", v)
+			os.Exit(2)
+		}
+		var err error
+		middlewares, err = loadMiddlewares(serviceConfig, cfg)
+		if err != nil {
+			logrus.Errorf("load middlewares failed: %s\n", err)
+			return nil, err
+		}
+		logrus.Debugf("load middlewares success for %s\n", svc)
+	}
+
+	backend := serviceConfig["backend"].(string)
+	backendAddr, err := url.Parse(backend)
+	if err != nil {
+		logrus.Errorf("parse %s failed: %s\n", backend, err)
+		return nil, err
+	}
+
+	// fmt.Printf("cfg = %#v\n", cfg)
+	proxy := NewSingleHostReverseProxy(&ProxyConfig{
+		PathPrefix:  serviceConfig["path_prefix"].(string),
+		BackendAddr: backendAddr,
+	})
 
 	n := negroni.New()
-	for _, mw := range f.middlewares {
+	for _, mw := range middlewares {
 		n.Use(mw)
 	}
 	n.UseHandler(proxy)
@@ -92,11 +148,16 @@ func (f *HTTPForward) getRedirectHandler() (http.Handler, error) {
 // NewSingleHostReverseProxy does not rewrite the Host header.
 // To rewrite Host headers, use ReverseProxy directly with a custom
 // Director policy.
-func NewSingleHostReverseProxy(target *url.URL) *httputil.ReverseProxy {
+func NewSingleHostReverseProxy(cfg *ProxyConfig) *httputil.ReverseProxy {
+	fmt.Printf("cfg = %#v\n", cfg)
+	target := cfg.BackendAddr
 	targetQuery := target.RawQuery
 	director := func(req *http.Request) {
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
+		if len(cfg.PathPrefix) != 0 {
+			req.URL.Path = strings.TrimPrefix(req.URL.Path, cfg.PathPrefix)
+		}
 		req.URL.Path = singleJoiningSlash(target.Path, req.URL.Path)
 		if targetQuery == "" || req.URL.RawQuery == "" {
 			req.URL.RawQuery = targetQuery + req.URL.RawQuery
@@ -152,4 +213,76 @@ func singleJoiningSlash(a, b string) string {
 		return a + "/" + b
 	}
 	return a + b
+}
+
+func loadMiddlewares(serviceConfig map[string]interface{}, cfgs []interface{}) ([]negroni.Handler, error) {
+	var middlewares []negroni.Handler
+	for _, v := range cfgs {
+		cfg := map[string]interface{}{}
+		switch v.(type) {
+		case map[string]interface{}:
+			cfg = v.(map[string]interface{})
+		case map[interface{}]interface{}:
+			for key, value := range v.(map[interface{}]interface{}) {
+				cfg[key.(string)] = value
+			}
+		default:
+			logrus.Errorf("unsupport middleware config type: %T\n", v)
+			os.Exit(3)
+		}
+
+		cfg["service"] = map[string]string{
+			"path_prefix": serviceConfig["path_prefix"].(string),
+		}
+
+		name := cfg["name"].(string)
+		var err error
+		var mw negroni.Handler
+		if fc, ok := middlewareMap[name]; ok {
+			mw, err = fc(cfg)
+		} else {
+			logrus.Debugf("try load middleware (%s) as plugin\n", name)
+			mw, err = loadPlugin(cfg)
+		}
+		if err != nil {
+			logrus.Errorf("load %s middleware failed: %s\n", name, err)
+			return nil, err
+		}
+		middlewares = append(middlewares, mw)
+	}
+	return middlewares, nil
+}
+
+func loadPlugin(cfg map[string]interface{}) (negroni.Handler, error) {
+	name := cfg["name"].(string)
+
+	var err error
+	var p *plugin.Plugin
+	var path string
+
+	hd, _ := homedir.Expand(fmt.Sprintf("~/.ga/middlewares/%s.so", name))
+
+	for _, path = range []string{
+		fmt.Sprintf("middlewares/%s.so", name),
+		fmt.Sprintf("/etc/ga/middlewares/%s.so", name),
+		hd,
+	} {
+		p, err = plugin.Open(path)
+		if err == nil {
+			logrus.Debugf("load plugin (%s) success", path)
+			break
+		}
+		logrus.Debugf("load plugin (%s) failed: %s", path, err)
+	}
+	if p == nil {
+		logrus.Errorf("can not load middleware plugin %s\n", name)
+		return nil, errors.New("can not load plugin")
+	}
+
+	f, err := p.Lookup("NewMiddleware")
+	if err != nil {
+		logrus.Errorf("lookup NewMiddleware func from plugin (%s) failed: %s", path, err)
+		return nil, err
+	}
+	return f.(func(map[string]interface{}) (negroni.Handler, error))(cfg)
 }
