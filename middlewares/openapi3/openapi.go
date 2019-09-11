@@ -60,6 +60,12 @@ type middleware struct {
 }
 
 func (this *middleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
+	// fix cors
+	if req.Method == "OPTIONS" {
+		next(w, req)
+		return
+	}
+
 	if !this.specLoaded {
 		writeJSON(w, 400, map[string]interface{}{"error": "spec is missing"})
 		return
@@ -82,7 +88,7 @@ func (this *middleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next
 
 	// TODO: 定制化获取方式，如通过哪个 Header 获取
 	requestor := req.Header.Get("X-User-Id")
-	fmt.Printf("requestor = %#v\n", requestor)
+	// fmt.Printf("requestor = %#v\n", requestor)
 	if requestor == "" {
 		requestor = "anonymous"
 	}
