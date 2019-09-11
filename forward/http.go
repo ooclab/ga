@@ -18,11 +18,14 @@ import (
 	"github.com/codegangsta/negroni"
 	"github.com/gorilla/mux"
 	homedir "github.com/mitchellh/go-homedir"
+	"github.com/rs/cors"
 	"github.com/sirupsen/logrus"
 )
 
+// https://github.com/urfave/negroni#third-party-middleware
 var middlewareMap = map[string]func(cfg map[string]interface{}) (negroni.Handler, error){
 	"logger": func(map[string]interface{}) (negroni.Handler, error) { return negroni.NewLogger(), nil },
+	"cors":   func(map[string]interface{}) (negroni.Handler, error) { return cors.AllowAll(), nil },
 }
 
 type ProxyConfig struct {
