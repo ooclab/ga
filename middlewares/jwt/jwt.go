@@ -5,17 +5,28 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/sirupsen/logrus"
 	"github.com/codegangsta/negroni"
 	jwt "github.com/dgrijalva/jwt-go"
+	"github.com/mitchellh/mapstructure"
+	"github.com/sirupsen/logrus"
 )
 
 var log *logrus.Entry
 
-type jwtMiddleware struct {
+type config struct {
+	Name          string `mapstructure:"name"` // this middleware name
+	UserIDKey     string `mapstructure:"user_id_key"`
+	PublicKey     string `mapstructure:"public_key"`
+	PublicKeyEtcd string `mapstructure:"public_key_etcd"`
+	ServiceConfig struct {
+		PathPrefix string `mapstructure:"path_prefix"`
+	} `mapstructure:"service"`
+}
+
+type middleware struct {
+	cfg    config
 	name   string
 	pubKey *rsa.PublicKey
-	cfg    map[string]string
 }
 
 // NewMiddleware 创建新的UID中间件
@@ -25,25 +36,29 @@ func NewMiddleware(_cfg map[string]interface{}) (negroni.Handler, error) {
 		"middleware": name,
 	})
 
-	cfg := map[string]string{}
-	for k, v := range _cfg {
-		switch v.(type) {
-		case string:
-			cfg[k] = v.(string)
-		default:
-			log.Errorf("unsuppported value type: %T\n", v)
-		}
+	h := &middleware{
+		name: name,
+		cfg:  config{},
+	}
+
+	if err := mapstructure.Decode(_cfg, &h.cfg); err != nil {
+		log.Errorf("load config failed: %s", err)
+		return nil, errors.New("decode config failed")
+	}
+
+	if h.cfg.UserIDKey == "" {
+		h.cfg.UserIDKey = "uid"
 	}
 
 	var err error
 	var pubKey []byte
-	if v, ok := cfg["public_key_etcd"]; ok {
-		pubKey, err = loadPublicKeyFromEtcd(v)
+	if h.cfg.PublicKeyEtcd != "" {
+		pubKey, err = loadPublicKeyFromEtcd(h.cfg.PublicKeyEtcd)
 		if err != nil {
 			return nil, err
 		}
-	} else if v, ok := cfg["public_key"]; ok {
-		pubKey = []byte(v)
+	} else if h.cfg.PublicKey != "" {
+		pubKey = []byte(h.cfg.PublicKey)
 	}
 	if pubKey == nil {
 		log.Errorf("no public key found!")
@@ -55,14 +70,13 @@ func NewMiddleware(_cfg map[string]interface{}) (negroni.Handler, error) {
 		logrus.Errorf("load public key failed: %s\n", err)
 		return nil, err
 	}
-	return &jwtMiddleware{
-		name:   name,
-		pubKey: pub,
-		cfg:    cfg,
-	}, nil
+
+	h.pubKey = pub
+
+	return h, nil
 }
 
-func (h *jwtMiddleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
+func (h *middleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
 	// do some stuff before
 
 	idToken := getIDToken(req)
@@ -76,7 +90,7 @@ func (h *jwtMiddleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next
 			return
 		}
 
-		uid, err := getUserID(idToken, h.pubKey)
+		uid, err := h.getUserID(idToken, h.pubKey)
 		if err != nil {
 			writeJSON(w, 403, map[string]string{"status": err.Error()})
 			return
@@ -95,7 +109,7 @@ func (h *jwtMiddleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next
 	// do some stuff after
 }
 
-func (this *jwtMiddleware) stillTokenValid(tok string) error {
+func (this *middleware) stillTokenValid(tok string) error {
 	// TODO: 确认当前 token 是否仍然有效（允许系统回收已经发出的 token）
 
 	// 1. ga 配置 token 签发时间不能早于某个时刻（如 time.Now()）
@@ -105,11 +119,35 @@ func (this *jwtMiddleware) stillTokenValid(tok string) error {
 	return nil
 }
 
-func (this *jwtMiddleware) stillRequestorActive(id string) error {
+func (this *middleware) stillRequestorActive(id string) error {
 	// TODO: 确认当前请求者是否仍然被许可（允许系统全局禁用用户）
 
 	// 1. token claims 里有特殊配置
 	// 2. 比如系统禁用某个用户，调用第三方服务
 
 	return nil
+}
+
+func (this *middleware) getUserID(idToken string, pubKey *rsa.PublicKey) (userid string, err error) {
+	token, err := jwt.Parse(idToken, func(token *jwt.Token) (interface{}, error) {
+		// TODO: support other
+		return pubKey, nil
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		id, ok := claims[this.cfg.UserIDKey]
+		if !ok {
+			logrus.WithFields(logrus.Fields{
+				"claims":      claims,
+				"user_id_key": this.cfg.UserIDKey,
+			}).Debugf("can not find user id in claims")
+			return "", nil
+		}
+		return id.(string), nil
+	}
+
+	return
 }

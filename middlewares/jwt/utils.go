@@ -1,14 +1,12 @@
 package main
 
 import (
-	"crypto/rsa"
 	"encoding/json"
 	"net/http"
 	"strings"
 
-	"github.com/sirupsen/logrus"
-	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/ooclab/ga/service/etcd"
+	"github.com/sirupsen/logrus"
 )
 
 func loadPublicKeyFromEtcd(publicKeyPath string) ([]byte, error) {
@@ -29,26 +27,6 @@ func loadPublicKeyFromEtcd(publicKeyPath string) ([]byte, error) {
 	return []byte(pubKey), nil
 }
 
-func getUserID(idToken string, pubKey *rsa.PublicKey) (userid string, err error) {
-	token, err := jwt.Parse(idToken, func(token *jwt.Token) (interface{}, error) {
-		// TODO: support other
-		return pubKey, nil
-	})
-	if err != nil {
-		return "", err
-	}
-
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		id, ok := claims["id"]
-		if !ok {
-			return "", nil
-		}
-		return id.(string), nil
-	}
-
-	return
-}
-
 func getIDToken(req *http.Request) string {
 	// 从 HTTP Request Header 中获取 Authorization 值
 	az := req.Header.Get("Authorization")
@@ -56,8 +34,11 @@ func getIDToken(req *http.Request) string {
 		l := strings.Split(az, " ")
 		if l[0] == "Bearer" {
 			if len(l) == 2 {
-				delete(req.Header, "Authorization")
+				// FIXME: openapi3 校验需要 Authorization 头依赖, 此处不可以删除
+				// delete(req.Header, "Authorization")
 				return l[1]
+			} else {
+				logrus.Warnf("Authorization has more than two components: %#v", l)
 			}
 		}
 	}
