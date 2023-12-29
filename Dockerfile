@@ -1,5 +1,6 @@
 FROM golang:1.21 AS builder
 
+ENV GO111MODULE=on GOPROXY=https://goproxy.cn
 WORKDIR /go/src/github.com/ooclab/ga
 COPY . .
 RUN make
