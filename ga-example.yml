@@ -1,0 +1,21 @@
+version: "2"
+
+# start the forward server
+listen: ":2999"
+
+services:
+
+  httpbin:
+    path_prefix: /httpbin
+    backend: https://httpbin.org
+    middlewares:
+    - name: logger
+    - name: debug
+
+  openai:
+    path_prefix: /v1
+    backend: http://1.2.3.4:9001/v1
+    middlewares:
+    - name: logger
+    - name: debug
+

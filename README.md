@@ -3,6 +3,7 @@
 **G**uardian **A**ngel is a lightweight middleware for service-oriented architecture.
 
 What is the `service-oriented` here ?
+
 1. `big services` : export a http(s) api
 2. `small services`
    - microservices / nanoservices
@@ -11,7 +12,7 @@ What is the `service-oriented` here ?
 We don't want to argument the term, we just want to do right job.
 :-)
 
-![](./docs/attachments/ga-current-arch.png)
+![ga arch](./docs/attachments/ga-current-arch.png)
 
 Current Support:
 
@@ -30,6 +31,7 @@ Current Middlewares:
 
 ## 目录
 
+- [作为 openai 的网关](./docs/openai-gateway.md)
 - [为什么开发 ga ？](./docs/reason.md)
 - [ideas](./docs/ideas.md)
 - [istio](./docs/istio.md)
@@ -41,7 +43,6 @@ ga 架构示例：
 
 - [ga 架构一](./docs/arch-design/arch1.md)
 
-
 ### 进展
 
 #### 已完成
@@ -50,7 +51,6 @@ ga 架构示例：
 - \[x] 支持 golang plugin 方式写自定义的 middleware 。 可以查看示例： [hello](https://github.com/ooclab/ga/tree/master/middlewares/hello)
 
 #### TODO
-
 
 ## Contact
 
