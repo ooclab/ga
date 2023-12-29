@@ -26,23 +26,23 @@ import (
 	"github.com/go-openapi/loads"
 	"github.com/go-openapi/spec"
 	"github.com/go-openapi/strfmt"
+	"github.com/go-openapi/swag"
 )
 
 // Spec validates an OpenAPI 2.0 specification document.
 //
 // Returns an error flattening in a single standard error, all validation messages.
 //
-//  - TODO: $ref should not have siblings
-//  - TODO: make sure documentation reflects all checks and warnings
-//  - TODO: check on discriminators
-//  - TODO: explicit message on unsupported keywords (better than "forbidden property"...)
-//  - TODO: full list of unresolved refs
-//  - TODO: validate numeric constraints (issue#581): this should be handled like defaults and examples
-//  - TODO: option to determine if we validate for go-swagger or in a more general context
-//  - TODO: check on required properties to support anyOf, allOf, oneOf
+//   - TODO: $ref should not have siblings
+//   - TODO: make sure documentation reflects all checks and warnings
+//   - TODO: check on discriminators
+//   - TODO: explicit message on unsupported keywords (better than "forbidden property"...)
+//   - TODO: full list of unresolved refs
+//   - TODO: validate numeric constraints (issue#581): this should be handled like defaults and examples
+//   - TODO: option to determine if we validate for go-swagger or in a more general context
+//   - TODO: check on required properties to support anyOf, allOf, oneOf
 //
 // NOTE: SecurityScopes are maps: no need to check uniqueness
-//
 func Spec(doc *loads.Document, formats strfmt.Registry) error {
 	errs, _ /*warns*/ := NewSpecValidator(doc.Schema(), formats).Validate(doc)
 	if errs.HasErrors() {
@@ -71,25 +71,22 @@ func NewSpecValidator(schema *spec.Schema, formats strfmt.Registry) *SpecValidat
 }
 
 // Validate validates the swagger spec
-func (s *SpecValidator) Validate(data interface{}) (errs *Result, warnings *Result) {
+func (s *SpecValidator) Validate(data interface{}) (*Result, *Result) {
 	var sd *loads.Document
-	errs = new(Result)
+	errs, warnings := new(Result), new(Result)
 
-	switch v := data.(type) {
-	case *loads.Document:
+	if v, ok := data.(*loads.Document); ok {
 		sd = v
 	}
 	if sd == nil {
 		errs.AddErrors(invalidDocumentMsg())
-		return
+		return errs, warnings // no point in continuing
 	}
 	s.spec = sd
 	s.analyzer = analysis.New(sd.Spec())
 
-	warnings = new(Result)
-
 	// Swagger schema validator
-	schv := NewSchemaValidator(s.schema, nil, "", s.KnownFormats)
+	schv := NewSchemaValidator(s.schema, nil, "", s.KnownFormats, SwaggerSchema(true))
 	var obj interface{}
 
 	// Raw spec unmarshalling errors
@@ -109,13 +106,13 @@ func (s *SpecValidator) Validate(data interface{}) (errs *Result, warnings *Resu
 	errs.Merge(schv.Validate(obj)) // error -
 	// There may be a point in continuing to try and determine more accurate errors
 	if !s.Options.ContinueOnErrors && errs.HasErrors() {
-		return // no point in continuing
+		return errs, warnings // no point in continuing
 	}
 
 	errs.Merge(s.validateReferencesValid()) // error -
 	// There may be a point in continuing to try and determine more accurate errors
 	if !s.Options.ContinueOnErrors && errs.HasErrors() {
-		return // no point in continuing
+		return errs, warnings // no point in continuing
 	}
 
 	errs.Merge(s.validateDuplicateOperationIDs())
@@ -129,7 +126,7 @@ func (s *SpecValidator) Validate(data interface{}) (errs *Result, warnings *Resu
 
 	// There may be a point in continuing to try and determine more accurate errors
 	if !s.Options.ContinueOnErrors && errs.HasErrors() {
-		return // no point in continuing
+		return errs, warnings // no point in continuing
 	}
 
 	// Values provided as default MUST validate their schema
@@ -144,10 +141,10 @@ func (s *SpecValidator) Validate(data interface{}) (errs *Result, warnings *Resu
 
 	errs.Merge(s.validateNonEmptyPathParamNames())
 
-	//errs.Merge(s.validateRefNoSibling()) // warning only
+	// errs.Merge(s.validateRefNoSibling()) // warning only
 	errs.Merge(s.validateReferenced()) // warning only
 
-	return
+	return errs, warnings
 }
 
 func (s *SpecValidator) validateNonEmptyPathParamNames() *Result {
@@ -172,9 +169,17 @@ func (s *SpecValidator) validateNonEmptyPathParamNames() *Result {
 
 func (s *SpecValidator) validateDuplicateOperationIDs() *Result {
 	// OperationID, if specified, must be unique across the board
+	var analyzer *analysis.Spec
+	if s.expanded != nil {
+		// $ref are valid: we can analyze operations on an expanded spec
+		analyzer = analysis.New(s.expanded.Spec())
+	} else {
+		// fallback on possible incomplete picture because of previous errors
+		analyzer = s.analyzer
+	}
 	res := new(Result)
 	known := make(map[string]int)
-	for _, v := range s.analyzer.OperationIDs() {
+	for _, v := range analyzer.OperationIDs() {
 		if v != "" {
 			known[v]++
 		}
@@ -336,14 +341,14 @@ func (s *SpecValidator) validateItems() *Result {
 		for path, op := range pi {
 			for _, param := range paramHelp.safeExpandedParamsFor(path, method, op.ID, res, s) {
 
-				if param.TypeName() == "array" && param.ItemsTypeName() == "" {
+				if param.TypeName() == arrayType && param.ItemsTypeName() == "" {
 					res.AddErrors(arrayInParamRequiresItemsMsg(param.Name, op.ID))
 					continue
 				}
-				if param.In != "body" {
+				if param.In != swaggerBody {
 					if param.Items != nil {
 						items := param.Items
-						for items.TypeName() == "array" {
+						for items.TypeName() == arrayType {
 							if items.ItemsTypeName() == "" {
 								res.AddErrors(arrayInParamRequiresItemsMsg(param.Name, op.ID))
 								break
@@ -374,7 +379,7 @@ func (s *SpecValidator) validateItems() *Result {
 			for _, resp := range responses {
 				// Response headers with array
 				for hn, hv := range resp.Headers {
-					if hv.TypeName() == "array" && hv.ItemsTypeName() == "" {
+					if hv.TypeName() == arrayType && hv.ItemsTypeName() == "" {
 						res.AddErrors(arrayInHeaderRequiresItemsMsg(hn, op.ID))
 					}
 				}
@@ -390,7 +395,7 @@ func (s *SpecValidator) validateItems() *Result {
 // Verifies constraints on array type
 func (s *SpecValidator) validateSchemaItems(schema spec.Schema, prefix, opID string) *Result {
 	res := new(Result)
-	if !schema.Type.Contains("array") {
+	if !schema.Type.Contains(arrayType) {
 		return res
 	}
 
@@ -463,9 +468,7 @@ func (s *SpecValidator) validateReferencedParameters() *Result {
 		expected["#/parameters/"+jsonpointer.Escape(k)] = struct{}{}
 	}
 	for _, k := range s.analyzer.AllParameterReferences() {
-		if _, ok := expected[k]; ok {
-			delete(expected, k)
-		}
+		delete(expected, k)
 	}
 
 	if len(expected) == 0 {
@@ -490,9 +493,7 @@ func (s *SpecValidator) validateReferencedResponses() *Result {
 		expected["#/responses/"+jsonpointer.Escape(k)] = struct{}{}
 	}
 	for _, k := range s.analyzer.AllResponseReferences() {
-		if _, ok := expected[k]; ok {
-			delete(expected, k)
-		}
+		delete(expected, k)
 	}
 
 	if len(expected) == 0 {
@@ -517,9 +518,7 @@ func (s *SpecValidator) validateReferencedDefinitions() *Result {
 		expected["#/definitions/"+jsonpointer.Escape(k)] = struct{}{}
 	}
 	for _, k := range s.analyzer.AllDefinitionReferences() {
-		if _, ok := expected[k]; ok {
-			delete(expected, k)
-		}
+		delete(expected, k)
 	}
 
 	if len(expected) == 0 {
@@ -541,7 +540,7 @@ DEFINITIONS:
 	for d, schema := range s.spec.Spec().Definitions {
 		if schema.Required != nil { // Safeguard
 			for _, pn := range schema.Required {
-				red := s.validateRequiredProperties(pn, d, &schema)
+				red := s.validateRequiredProperties(pn, d, &schema) //#nosec
 				res.Merge(red)
 				if !red.IsValid() && !s.Options.ContinueOnErrors {
 					break DEFINITIONS // there is an error, let's stop that bleeding
@@ -613,7 +612,7 @@ func (s *SpecValidator) validateRequiredProperties(path, in string, v *spec.Sche
 func (s *SpecValidator) validateParameters() *Result {
 	// - for each method, path is unique, regardless of path parameters
 	//   e.g. GET:/petstore/{id}, GET:/petstore/{pet}, GET:/petstore are
-	//   considered duplicate paths
+	//   considered duplicate paths, if StrictPathParamUniqueness is enabled.
 	// - each parameter should have a unique `name` and `type` combination
 	// - each operation should have only 1 parameter of type body
 	// - there must be at most 1 parameter in body
@@ -622,10 +621,10 @@ func (s *SpecValidator) validateParameters() *Result {
 	// - path param must be required
 	res := new(Result)
 	rexGarbledPathSegment := mustCompileRegexp(`.*[{}\s]+.*`)
-	for method, pi := range s.analyzer.Operations() {
+	for method, pi := range s.expandedAnalyzer().Operations() {
 		methodPaths := make(map[string]map[string]string)
-		if pi != nil { // Safeguard
-			for path, op := range pi {
+		for path, op := range pi {
+			if s.Options.StrictPathParamUniqueness {
 				pathToAdd := pathHelp.stripParametersInPath(path)
 
 				// Warn on garbled path afer param stripping
@@ -646,76 +645,105 @@ func (s *SpecValidator) validateParameters() *Result {
 					if _, found := methodPaths[method]; !found {
 						methodPaths[method] = map[string]string{}
 					}
-					methodPaths[method][pathToAdd] = path //Original non stripped path
+					methodPaths[method][pathToAdd] = path // Original non stripped path
 
 				}
-
-				var bodyParams []string
-				var paramNames []string
-				var hasForm, hasBody bool
-
-				// Check parameters names uniqueness for operation
-				// TODO: should be done after param expansion
-				res.Merge(s.checkUniqueParams(path, method, op))
-
-				for _, pr := range paramHelp.safeExpandedParamsFor(path, method, op.ID, res, s) {
-					// Validate pattern regexp for parameters with a Pattern property
-					if _, err := compileRegexp(pr.Pattern); err != nil {
-						res.AddErrors(invalidPatternInParamMsg(op.ID, pr.Name, pr.Pattern))
-					}
-
-					// There must be at most one parameter in body: list them all
-					if pr.In == "body" {
-						bodyParams = append(bodyParams, fmt.Sprintf("%q", pr.Name))
-						hasBody = true
-					}
-
-					if pr.In == "path" {
-						paramNames = append(paramNames, pr.Name)
-						// Path declared in path must have the required: true property
-						if !pr.Required {
-							res.AddErrors(pathParamRequiredMsg(op.ID, pr.Name))
-						}
-					}
-
-					if pr.In == "formData" {
-						hasForm = true
-					}
-				}
-
-				// In:formData and In:body are mutually exclusive
-				if hasBody && hasForm {
-					res.AddErrors(bothFormDataAndBodyMsg(op.ID))
-				}
-				// There must be at most one body param
-				// Accurately report situations when more than 1 body param is declared (possibly unnamed)
-				if len(bodyParams) > 1 {
-					sort.Strings(bodyParams)
-					res.AddErrors(multipleBodyParamMsg(op.ID, bodyParams))
-				}
-
-				// Check uniqueness of parameters in path
-				paramsInPath := pathHelp.extractPathParams(path)
-				for i, p := range paramsInPath {
-					for j, q := range paramsInPath {
-						if p == q && i > j {
-							res.AddErrors(pathParamNotUniqueMsg(path, p, q))
-							break
-						}
-					}
-				}
-
-				// Warns about possible malformed params in path
-				rexGarbledParam := mustCompileRegexp(`{.*[{}\s]+.*}`)
-				for _, p := range paramsInPath {
-					if rexGarbledParam.MatchString(p) {
-						res.AddWarnings(pathParamGarbledMsg(path, p))
-					}
-				}
-
-				// Match params from path vs params from params section
-				res.Merge(s.validatePathParamPresence(path, paramsInPath, paramNames))
 			}
+
+			var bodyParams []string
+			var paramNames []string
+			var hasForm, hasBody bool
+
+			// Check parameters names uniqueness for operation
+			// TODO: should be done after param expansion
+			res.Merge(s.checkUniqueParams(path, method, op))
+
+			paramSchema, ok := s.schema.Definitions["parameter"]
+			if !ok {
+				panic("unexpected swagger schema: missing #/definitions/parameter")
+			}
+
+			for _, pr := range paramHelp.safeExpandedParamsFor(path, method, op.ID, res, s) {
+				// An expanded parameter must validate its schema (an unexpanded $ref always pass high-level schema validation)
+				schv := NewSchemaValidator(&paramSchema, s.schema, fmt.Sprintf("%s.%s.parameters.%s", path, method, pr.Name), s.KnownFormats, SwaggerSchema(true))
+				obj := swag.ToDynamicJSON(pr)
+				paramValidationResult := schv.Validate(obj)
+				res.Merge(paramValidationResult)
+
+				// Validate pattern regexp for parameters with a Pattern property
+				if _, err := compileRegexp(pr.Pattern); err != nil {
+					res.AddErrors(invalidPatternInParamMsg(op.ID, pr.Name, pr.Pattern))
+				}
+
+				// There must be at most one parameter in body: list them all
+				if pr.In == swaggerBody {
+					bodyParams = append(bodyParams, fmt.Sprintf("%q", pr.Name))
+					hasBody = true
+				}
+
+				if pr.In == "path" {
+					paramNames = append(paramNames, pr.Name)
+					// Path declared in path must have the required: true property
+					if !pr.Required {
+						res.AddErrors(pathParamRequiredMsg(op.ID, pr.Name))
+					}
+				}
+
+				if pr.In == "formData" {
+					hasForm = true
+				}
+
+				if !(pr.Type == numberType || pr.Type == integerType) &&
+					(pr.Maximum != nil || pr.Minimum != nil || pr.MultipleOf != nil) {
+					// A non-numeric parameter has validation keywords for numeric instances (number and integer)
+					res.AddWarnings(parameterValidationTypeMismatchMsg(pr.Name, path, pr.Type))
+				}
+
+				if !(pr.Type == stringType) &&
+					// A non-string parameter has validation keywords for strings
+					(pr.MaxLength != nil || pr.MinLength != nil || pr.Pattern != "") {
+					res.AddWarnings(parameterValidationTypeMismatchMsg(pr.Name, path, pr.Type))
+				}
+
+				if !(pr.Type == arrayType) &&
+					// A non-array parameter has validation keywords for arrays
+					(pr.MaxItems != nil || pr.MinItems != nil || pr.UniqueItems) {
+					res.AddWarnings(parameterValidationTypeMismatchMsg(pr.Name, path, pr.Type))
+				}
+			}
+
+			// In:formData and In:body are mutually exclusive
+			if hasBody && hasForm {
+				res.AddErrors(bothFormDataAndBodyMsg(op.ID))
+			}
+			// There must be at most one body param
+			// Accurately report situations when more than 1 body param is declared (possibly unnamed)
+			if len(bodyParams) > 1 {
+				sort.Strings(bodyParams)
+				res.AddErrors(multipleBodyParamMsg(op.ID, bodyParams))
+			}
+
+			// Check uniqueness of parameters in path
+			paramsInPath := pathHelp.extractPathParams(path)
+			for i, p := range paramsInPath {
+				for j, q := range paramsInPath {
+					if p == q && i > j {
+						res.AddErrors(pathParamNotUniqueMsg(path, p, q))
+						break
+					}
+				}
+			}
+
+			// Warns about possible malformed params in path
+			rexGarbledParam := mustCompileRegexp(`{.*[{}\s]+.*}`)
+			for _, p := range paramsInPath {
+				if rexGarbledParam.MatchString(p) {
+					res.AddWarnings(pathParamGarbledMsg(path, p))
+				}
+			}
+
+			// Match params from path vs params from params section
+			res.Merge(s.validatePathParamPresence(path, paramsInPath, paramNames))
 		}
 	}
 	return res
@@ -755,7 +783,7 @@ func (s *SpecValidator) checkUniqueParams(path, method string, op *spec.Operatio
 	if op.Parameters != nil { // Safeguard
 		for _, ppr := range op.Parameters {
 			var ok bool
-			pr, red := paramHelp.resolveParam(path, method, op.ID, &ppr, s)
+			pr, red := paramHelp.resolveParam(path, method, op.ID, &ppr, s) //#nosec
 			res.Merge(red)
 
 			if pr != nil && pr.Name != "" { // params with empty name does no participate the check
@@ -774,4 +802,13 @@ func (s *SpecValidator) checkUniqueParams(path, method string, op *spec.Operatio
 // SetContinueOnErrors sets the ContinueOnErrors option for this validator.
 func (s *SpecValidator) SetContinueOnErrors(c bool) {
 	s.Options.ContinueOnErrors = c
+}
+
+// expandedAnalyzer returns expanded.Analyzer when it is available.
+// otherwise just analyzer.
+func (s *SpecValidator) expandedAnalyzer() *analysis.Spec {
+	if s.expanded != nil && s.expanded.Analyzer != nil {
+		return s.expanded.Analyzer
+	}
+	return s.analyzer
 }

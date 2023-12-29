@@ -1,4 +1,4 @@
-// Copyright 2016 The etcd Authors
+// Copyright 2016 CoreOS, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,127 +15,156 @@
 package clientv3
 
 import (
-	"context"
+	"sync"
 
-	pb "go.etcd.io/etcd/etcdserver/etcdserverpb"
-	"go.etcd.io/etcd/pkg/types"
-
-	"google.golang.org/grpc"
+	"github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context"
+	"github.com/coreos/etcd/Godeps/_workspace/src/google.golang.org/grpc"
+	pb "github.com/coreos/etcd/etcdserver/etcdserverpb"
 )
 
 type (
-	Member                pb.Member
-	MemberListResponse    pb.MemberListResponse
-	MemberAddResponse     pb.MemberAddResponse
-	MemberRemoveResponse  pb.MemberRemoveResponse
-	MemberUpdateResponse  pb.MemberUpdateResponse
-	MemberPromoteResponse pb.MemberPromoteResponse
+	Member               pb.Member
+	MemberListResponse   pb.MemberListResponse
+	MemberAddResponse    pb.MemberAddResponse
+	MemberRemoveResponse pb.MemberRemoveResponse
+	MemberUpdateResponse pb.MemberUpdateResponse
 )
 
 type Cluster interface {
 	// MemberList lists the current cluster membership.
 	MemberList(ctx context.Context) (*MemberListResponse, error)
 
+	// MemberLeader returns the current leader member.
+	MemberLeader(ctx context.Context) (*Member, error)
+
 	// MemberAdd adds a new member into the cluster.
 	MemberAdd(ctx context.Context, peerAddrs []string) (*MemberAddResponse, error)
-
-	// MemberAddAsLearner adds a new learner member into the cluster.
-	MemberAddAsLearner(ctx context.Context, peerAddrs []string) (*MemberAddResponse, error)
 
 	// MemberRemove removes an existing member from the cluster.
 	MemberRemove(ctx context.Context, id uint64) (*MemberRemoveResponse, error)
 
 	// MemberUpdate updates the peer addresses of the member.
 	MemberUpdate(ctx context.Context, id uint64, peerAddrs []string) (*MemberUpdateResponse, error)
-
-	// MemberPromote promotes a member from raft learner (non-voting) to raft voting member.
-	MemberPromote(ctx context.Context, id uint64) (*MemberPromoteResponse, error)
 }
 
 type cluster struct {
-	remote   pb.ClusterClient
-	callOpts []grpc.CallOption
+	c *Client
+
+	mu     sync.Mutex
+	conn   *grpc.ClientConn // conn in-use
+	remote pb.ClusterClient
 }
 
 func NewCluster(c *Client) Cluster {
-	api := &cluster{remote: RetryClusterClient(c)}
-	if c != nil {
-		api.callOpts = c.callOpts
-	}
-	return api
-}
+	conn := c.ActiveConnection()
 
-func NewClusterFromClusterClient(remote pb.ClusterClient, c *Client) Cluster {
-	api := &cluster{remote: remote}
-	if c != nil {
-		api.callOpts = c.callOpts
+	return &cluster{
+		c: c,
+
+		conn:   conn,
+		remote: pb.NewClusterClient(conn),
 	}
-	return api
 }
 
 func (c *cluster) MemberAdd(ctx context.Context, peerAddrs []string) (*MemberAddResponse, error) {
-	return c.memberAdd(ctx, peerAddrs, false)
-}
+	r := &pb.MemberAddRequest{PeerURLs: peerAddrs}
+	resp, err := c.getRemote().MemberAdd(ctx, r)
+	if err == nil {
+		return (*MemberAddResponse)(resp), nil
+	}
 
-func (c *cluster) MemberAddAsLearner(ctx context.Context, peerAddrs []string) (*MemberAddResponse, error) {
-	return c.memberAdd(ctx, peerAddrs, true)
-}
-
-func (c *cluster) memberAdd(ctx context.Context, peerAddrs []string, isLearner bool) (*MemberAddResponse, error) {
-	// fail-fast before panic in rafthttp
-	if _, err := types.NewURLs(peerAddrs); err != nil {
+	if isHalted(ctx, err) {
 		return nil, err
 	}
 
-	r := &pb.MemberAddRequest{
-		PeerURLs:  peerAddrs,
-		IsLearner: isLearner,
-	}
-	resp, err := c.remote.MemberAdd(ctx, r, c.callOpts...)
-	if err != nil {
-		return nil, toErr(ctx, err)
-	}
-	return (*MemberAddResponse)(resp), nil
+	go c.switchRemote(err)
+	return nil, err
 }
 
 func (c *cluster) MemberRemove(ctx context.Context, id uint64) (*MemberRemoveResponse, error) {
 	r := &pb.MemberRemoveRequest{ID: id}
-	resp, err := c.remote.MemberRemove(ctx, r, c.callOpts...)
-	if err != nil {
-		return nil, toErr(ctx, err)
+	resp, err := c.getRemote().MemberRemove(ctx, r)
+	if err == nil {
+		return (*MemberRemoveResponse)(resp), nil
 	}
-	return (*MemberRemoveResponse)(resp), nil
-}
 
-func (c *cluster) MemberUpdate(ctx context.Context, id uint64, peerAddrs []string) (*MemberUpdateResponse, error) {
-	// fail-fast before panic in rafthttp
-	if _, err := types.NewURLs(peerAddrs); err != nil {
+	if isHalted(ctx, err) {
 		return nil, err
 	}
 
+	go c.switchRemote(err)
+	return nil, err
+}
+
+func (c *cluster) MemberUpdate(ctx context.Context, id uint64, peerAddrs []string) (*MemberUpdateResponse, error) {
 	// it is safe to retry on update.
-	r := &pb.MemberUpdateRequest{ID: id, PeerURLs: peerAddrs}
-	resp, err := c.remote.MemberUpdate(ctx, r, c.callOpts...)
-	if err == nil {
-		return (*MemberUpdateResponse)(resp), nil
+	for {
+		r := &pb.MemberUpdateRequest{ID: id, PeerURLs: peerAddrs}
+		resp, err := c.getRemote().MemberUpdate(ctx, r)
+		if err == nil {
+			return (*MemberUpdateResponse)(resp), nil
+		}
+
+		if isHalted(ctx, err) {
+			return nil, err
+		}
+
+		err = c.switchRemote(err)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return nil, toErr(ctx, err)
 }
 
 func (c *cluster) MemberList(ctx context.Context) (*MemberListResponse, error) {
 	// it is safe to retry on list.
-	resp, err := c.remote.MemberList(ctx, &pb.MemberListRequest{}, c.callOpts...)
-	if err == nil {
-		return (*MemberListResponse)(resp), nil
+	for {
+		resp, err := c.getRemote().MemberList(ctx, &pb.MemberListRequest{})
+		if err == nil {
+			return (*MemberListResponse)(resp), nil
+		}
+
+		if isHalted(ctx, err) {
+			return nil, err
+		}
+
+		err = c.switchRemote(err)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return nil, toErr(ctx, err)
 }
 
-func (c *cluster) MemberPromote(ctx context.Context, id uint64) (*MemberPromoteResponse, error) {
-	r := &pb.MemberPromoteRequest{ID: id}
-	resp, err := c.remote.MemberPromote(ctx, r, c.callOpts...)
+func (c *cluster) MemberLeader(ctx context.Context) (*Member, error) {
+	resp, err := c.MemberList(ctx)
 	if err != nil {
-		return nil, toErr(ctx, err)
+		return nil, err
 	}
-	return (*MemberPromoteResponse)(resp), nil
+	for _, m := range resp.Members {
+		if m.IsLeader {
+			return (*Member)(m), nil
+		}
+	}
+	return nil, nil
+}
+
+func (c *cluster) getRemote() pb.ClusterClient {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.remote
+}
+
+func (c *cluster) switchRemote(prevErr error) error {
+	newConn, err := c.c.retryConnection(c.conn, prevErr)
+	if err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.conn = newConn
+	c.remote = pb.NewClusterClient(c.conn)
+	return nil
 }

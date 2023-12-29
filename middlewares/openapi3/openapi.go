@@ -13,6 +13,8 @@ import (
 	"github.com/codegangsta/negroni"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
+	"github.com/getkin/kin-openapi/routers"
+	"github.com/getkin/kin-openapi/routers/gorillamux"
 	"github.com/mitchellh/mapstructure"
 	"github.com/sirupsen/logrus"
 )
@@ -54,8 +56,8 @@ func (this *permRequest) String() string {
 
 type middleware struct {
 	cfg        config
-	spec       *openapi3.Swagger
-	router     *openapi3filter.Router
+	spec       *openapi3.T
+	router     routers.Router
 	specLoaded bool
 }
 
@@ -79,7 +81,7 @@ func (this *middleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next
 	}
 
 	// Find route
-	route, pathParams, err := this.router.FindRoute(req.Method, req.URL)
+	route, pathParams, err := this.router.FindRoute(req)
 	if err != nil {
 		log.Errorf("can not find operation for request: %s", err)
 		writeJSON(w, 400, map[string]interface{}{"error": err.Error()})
@@ -132,10 +134,10 @@ func (this *middleware) loadSpec() error {
 	var err error
 
 	// loads openapi spec
-	var spec *openapi3.Swagger
+	var spec *openapi3.T
 	addr := this.cfg.ServiceSpec
 	if addr[0] == '/' {
-		spec, err = openapi3.NewSwaggerLoader().LoadSwaggerFromFile(addr)
+		spec, err = openapi3.NewLoader().LoadFromFile(addr)
 	} else if strings.HasPrefix(addr, "http") {
 		var urlAddr *url.URL
 		urlAddr, err = url.Parse(addr)
@@ -143,7 +145,7 @@ func (this *middleware) loadSpec() error {
 			log.Errorf("parse url %s failed: %s", addr, err)
 			return err
 		}
-		spec, err = openapi3.NewSwaggerLoader().LoadSwaggerFromURI(urlAddr)
+		spec, err = openapi3.NewLoader().LoadFromURI(urlAddr)
 	}
 	if err != nil {
 		log.Debugf("load spec from \"%s\" failed: %s", addr, err)
@@ -156,7 +158,7 @@ func (this *middleware) loadSpec() error {
 	spec.Servers = make([]*openapi3.Server, 0)
 
 	this.spec = spec
-	this.router = openapi3filter.NewRouter().WithSwagger(spec)
+	this.router, _ = gorillamux.NewRouter(spec)
 
 	return nil
 }

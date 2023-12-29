@@ -148,7 +148,7 @@ func (b *basicCommonValidator) SetPath(path string) {
 	b.Path = path
 }
 
-func (b *basicCommonValidator) Applies(source interface{}, kind reflect.Kind) bool {
+func (b *basicCommonValidator) Applies(source interface{}, _ reflect.Kind) bool {
 	switch source.(type) {
 	case *spec.Parameter, *spec.Schema, *spec.Header:
 		return true
@@ -452,6 +452,7 @@ func (s *basicSliceValidator) Validate(data interface{}) *Result {
 	return nil
 }
 
+/* unused
 func (s *basicSliceValidator) hasDuplicates(value reflect.Value, size int) bool {
 	dict := make(map[interface{}]struct{})
 	for i := 0; i < size; i++ {
@@ -463,6 +464,7 @@ func (s *basicSliceValidator) hasDuplicates(value reflect.Value, size int) bool 
 	}
 	return false
 }
+*/
 
 type numberValidator struct {
 	Path             string
@@ -611,7 +613,7 @@ func (s *stringValidator) Applies(source interface{}, kind reflect.Kind) bool {
 func (s *stringValidator) Validate(val interface{}) *Result {
 	data, ok := val.(string)
 	if !ok {
-		return errorHelp.sErr(errors.InvalidType(s.Path, s.In, "string", val))
+		return errorHelp.sErr(errors.InvalidType(s.Path, s.In, stringType, val))
 	}
 
 	if s.Required && !s.AllowEmptyValue && (s.Default == nil || s.Default == "") {

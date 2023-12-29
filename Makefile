@@ -7,9 +7,15 @@ GOINSTALL=$(GOCMD) install
 GOTEST=$(GOCMD) test
 GODEP=$(GOTEST) -i
 GOFMT=gofmt -w
+
+BUILD_DATE := "$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')"
+GIT_COMMIT := "$(shell git rev-parse HEAD)"
+VERSION :="$(shell git describe --tags --abbrev=0 | tr -d '\n')"
+VERSION_COMMIT :="$(shell git describe --tags --abbrev=0 | tr -d '\n')-$(shell git rev-parse HEAD | tr -d '\n')"
+
 # LDFLAGS=-ldflags "-s"
-LDFLAGS=-ldflags "-s -X main.buildstamp=`date -u '+%Y-%m-%dT%H:%M:%SZ'` -X main.githash=`git rev-parse HEAD | cut -c1-8`"
-STATIC_LDFLAGS=-a -installsuffix cgo -ldflags "-s -X main.buildstamp=`date -u '+%Y-%m-%dT%H:%M:%SZ'` -X main.githash=`git rev-parse HEAD | cut -c1-8`"
+LDFLAGS=-ldflags "-s -X github.com/ooclab/ga/version.buildDate=$(BUILD_DATE) -X github.com/ooclab/ga/version.gitCommit=$(VERSION_COMMIT) -X github.com/ooclab/ga/version.gitVersion=$(VERSION)"
+STATIC_LDFLAGS=-a -installsuffix cgo $(LDFLAGS)"
 
 PROGRAM_NAME=ga
 SUBDIRS := $(wildcard middlewares/*/.)
@@ -27,6 +33,9 @@ build-static:
 
 test:
 	go test -v --cover ./...
+
+clean:
+	rm -f *.so ga
 
 
 .PHONY: all $(SUBDIRS) build test

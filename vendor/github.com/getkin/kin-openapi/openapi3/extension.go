@@ -1,37 +1,32 @@
 package openapi3
 
 import (
-	"github.com/getkin/kin-openapi/jsoninfo"
+	"context"
+	"fmt"
+	"sort"
+	"strings"
 )
 
-// ExtensionProps provides support for OpenAPI extensions.
-// It reads/writes all properties that begin with "x-".
-type ExtensionProps struct {
-	Extensions map[string]interface{} `json:"-"`
-}
+func validateExtensions(ctx context.Context, extensions map[string]interface{}) error { // FIXME: newtype + Validate(...)
+	allowed := getValidationOptions(ctx).extraSiblingFieldsAllowed
 
-// Assert that the type implements the interface
-var _ jsoninfo.StrictStruct = &ExtensionProps{}
-
-// EncodeWith will be invoked by package "jsoninfo"
-func (props *ExtensionProps) EncodeWith(encoder *jsoninfo.ObjectEncoder, value interface{}) error {
-	for k, v := range props.Extensions {
-		if err := encoder.EncodeExtension(k, v); err != nil {
-			return err
+	var unknowns []string
+	for k := range extensions {
+		if strings.HasPrefix(k, "x-") {
+			continue
 		}
-	}
-	return encoder.EncodeStructFieldsAndExtensions(value)
-}
-
-// DecodeWith will be invoked by package "jsoninfo"
-func (props *ExtensionProps) DecodeWith(decoder *jsoninfo.ObjectDecoder, value interface{}) error {
-	source := decoder.DecodeExtensionMap()
-	if len(source) > 0 {
-		result := make(map[string]interface{}, len(source))
-		for k, v := range source {
-			result[k] = v
+		if allowed != nil {
+			if _, ok := allowed[k]; ok {
+				continue
+			}
 		}
-		props.Extensions = result
+		unknowns = append(unknowns, k)
 	}
-	return decoder.DecodeStructFieldsAndExtensions(value)
+
+	if len(unknowns) != 0 {
+		sort.Strings(unknowns)
+		return fmt.Errorf("extra sibling fields: %+v", unknowns)
+	}
+
+	return nil
 }
