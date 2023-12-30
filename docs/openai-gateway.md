@@ -113,3 +113,41 @@ curl $OPENAI_BASE_URL/audio/speech \
 - [ ] 支持 tokens 统计、限流
 - [ ] 支持 api key 认证（自定义）
 - [ ] 支持其他 LLMs （私有化部署）
+
+## FAQ & Tips
+
+### 如何查看 debug 信息？
+
+只要在 http url 中添加 `debug=true` （不会传给 backend）即可，例如：
+
+```bash
+curl $OPENAI_BASE_URL/audio/speech\?debug=true \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tts-1-hd",
+    "input": "Courage is what it takes to stand up and speak; courage is also what it takes to sit down and listen.",
+    "voice": "alloy"
+  }' \
+  --output speech-hd.mp3
+```
+
+结果示例（ga log 中可以查看到）：
+
+```plain
+ga-openai-1  | POST /v1/audio/speech?debug=true HTTP/1.1
+ga-openai-1  | Host: 1.2.3.4:2999
+ga-openai-1  | Accept: */*
+ga-openai-1  | Authorization: Bearer sk-xxx
+ga-openai-1  | Content-Length: 169
+ga-openai-1  | Content-Type: application/json
+ga-openai-1  | User-Agent: curl/8.4.0
+ga-openai-1  |
+ga-openai-1  | {
+ga-openai-1  |     "model": "tts-1-hd",
+ga-openai-1  |     "input": "Courage is what it takes to stand up and speak; courage is also what it takes to sit down and listen.",
+ga-openai-1  |     "voice": "alloy"
+ga-openai-1  |   }
+```
+
+**或者** 设置环境变量 `GA_DEBUG=true`
