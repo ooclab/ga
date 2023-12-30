@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -21,9 +22,13 @@ type EtcdTokenStore struct {
 	etcdClient *clientv3.Client
 }
 
-func NewEtcdTokenStore() TokenStore {
+func NewEtcdTokenStore(etcdAddr string) TokenStore {
+	if etcdAddr == "" {
+		etcdAddr = "localhost:2379"
+	}
+	fmt.Printf("connect to etcd server %s\n", etcdAddr)
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints: []string{"http://localhost:2379"},
+		Endpoints: []string{etcdAddr},
 	})
 	if err != nil {
 		panic(err)

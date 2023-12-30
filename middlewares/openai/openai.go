@@ -85,8 +85,7 @@ func (this *middleware) ServeHTTP(w http.ResponseWriter, req *http.Request, next
 
 func NewMiddleware(cfg map[string]interface{}) (negroni.Handler, error) {
 	midd := &middleware{
-		cfg:   config{},
-		store: NewEtcdTokenStore(),
+		cfg: config{},
 	}
 
 	log = logrus.WithFields(logrus.Fields{
@@ -97,6 +96,8 @@ func NewMiddleware(cfg map[string]interface{}) (negroni.Handler, error) {
 		log.Errorf("load config failed: %s", err)
 		return nil, errors.New("decode config failed")
 	}
+
+	midd.store = NewEtcdTokenStore(midd.cfg.EtcdAddr)
 
 	return midd, nil
 }
