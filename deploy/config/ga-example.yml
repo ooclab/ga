@@ -14,7 +14,7 @@ services:
 
   openai:
     path_prefix: /v1
-    backend: http://1.2.3.4:9001/v1
+    backend: https://api.openai.com/v1
     middlewares:
     - name: logger
     - name: debug

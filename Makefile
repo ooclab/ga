@@ -1,5 +1,6 @@
 # Go parameters
 TOPDIR=$(PWD)
+MODULE_PATH=~/.ga/middlewares
 GOCMD=go
 GOBUILD=$(GOCMD) build -mod=mod
 GOCLEAN=$(GOCMD) clean
@@ -26,7 +27,8 @@ build:
 	$(GOBUILD) -v $(LDFLAGS) -o $(PROGRAM_NAME)
 
 $(SUBDIRS):
-	cd $@ && go build -buildmode=plugin && cp -v *.so $(TOPDIR)
+	mkdir -pv $(MODULE_PATH)
+	cd $@ && go build -buildmode=plugin && cp -v *.so $(MODULE_PATH)
 
 build-static:
 	CGO_ENABLED=0 $(GOBUILD) -v $(STATIC_LDFLAGS) -o $(PROGRAM_NAME)
