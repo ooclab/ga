@@ -1,0 +1,16 @@
+version: "2"
+
+# start the forward server
+listen: ":2999"
+
+services:
+
+  openai:
+    path_prefix: /v1
+    backend: https://api.openai.com/v1
+    middlewares:
+    - name: logger
+    - name: debug
+    - name: openai
+      etcd_addr: http://127.0.0.1:2379
+      # limit_day: 100

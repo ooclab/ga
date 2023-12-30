@@ -2,13 +2,13 @@
 
 ## 启动服务
 
-修改 `config.yml` 。
+修改 `ga-config-example.yml` 。
 
 ```shell
 # 启动本目录下的 etcd 服务
 docker-compose up -d
 # 到 ga 主目录下启动 ga 服务
-GA_DEBUG=true ./ga serve -c deploy/openai/config.yml
+GA_DEBUG=true ./ga serve -c deploy/openai/ga-config-example.yml
 ```
 
 ## 使用
