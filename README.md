@@ -20,6 +20,7 @@ Current Support:
 
 Current Middlewares:
 
+- \[x] [openai](./middlewares/openai) : as a gateway of openai, custom your key and limit the request count
 - \[x] [hello](./middlewares/hello) : for example
 - \[x] [jwt](./middlewares/jwt) : decode JWT (from `Authorization` in HTTP Request Header), and set `X-User-Id` header by user id
 - \[x] [addauth](./middlewares/addauth) : manage `access_token` and `refresh_token` , add JWT with `Authorization` in HTTP Request Header auto
