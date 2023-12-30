@@ -53,6 +53,11 @@ ga 架构示例：
 
 #### TODO
 
+- [ ] 支持提供 TLS 服务：指定证书和私钥或使用 letsencrypt 申请并自动更新证书（参考 caddy 和 traefik ）。避免使用文件系统存放证书，而是使用 etcd 存放证书（分布式）。
+- [ ] 使用 etcd 或类似服务作为统一分布式存储，主程序和 middleware 都可以使用 etcd 存储和读取数据及配置，提供统一内部 API 供主程序和 middleware 使用。
+  - 存储可以考虑单机（kv）或分布式（etcd）2种方式，提供统一的 store 抽象。
+  - main, middleware 的配置和数据（监控），以及 let's encrypt 的证书都需要存储。
+
 ## Contact
 
 - info@ooclab.com
