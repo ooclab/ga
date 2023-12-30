@@ -1,6 +1,6 @@
 # Go parameters
 TOPDIR=$(PWD)
-MODULE_PATH=~/.ga/middlewares
+MODULE_PATH ?= ~/.ga/middlewares
 GOCMD=go
 GOBUILD=$(GOCMD) build -mod=mod
 GOCLEAN=$(GOCMD) clean
