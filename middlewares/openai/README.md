@@ -12,7 +12,8 @@ btw, ga 是透明网关，因此 openai api 自身的限制配额和用户账户
 
 ## 使用
 
-[配置 openai middle 示例](../../deploy/openai/README.md)
+- [配置 openai middle 示例](../../deploy/openai/README.md)
+- [生厂环境部署示例](../../deploy/openai/production/README.md)
 
 ## TODO
 
