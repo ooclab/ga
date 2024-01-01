@@ -21,3 +21,8 @@ docker compose exec etcd etcdctl put $OPENAI_API_KEY '{"token":"sk-xxx", "count"
 # 获取 key 配置
 docker compose exec etcd etcdctl get $OPENAI_API_KEY
 ```
+
+### 国内请使用备案域名
+
+如果你的服务运行在国内（再使用一层 proxy 访问 openai api），
+阿里云测试遇到未备案域名无法访问，使用备案域名即可。

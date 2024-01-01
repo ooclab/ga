@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httputil"
+	"strings"
 
 	"github.com/codegangsta/negroni"
 	"github.com/spf13/viper"
@@ -19,7 +20,13 @@ func (h *debugMiddleware) ServeHTTP(w http.ResponseWriter, req *http.Request, ne
 		if err != nil {
 			fmt.Println(err)
 		}
-		fmt.Println(string(requestDump))
+		// 如果请求 body 是 json 格式，可以使用下面的方法打印
+		if req.Header.Get("Content-Type") == "application/json" {
+			fmt.Println(string(requestDump))
+		} else {
+			// 否则只输出请求头
+			fmt.Println(string(requestDump[:strings.Index(string(requestDump), "\r\n\r\n")]))
+		}
 	}
 
 	next(w, req)
